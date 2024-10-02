@@ -103,6 +103,21 @@ class PolarisationSensor(CompoundEye):
         return self.nb_ommatidia
 
 
+class MinimalDevicePolarisationSensor(PolarisationSensor):
+    def __init__(self, nb_lenses=3, omm_photoreceptor_angle=1, field_of_view=56, degrees=True, *args, **kwargs):
+        kwargs.setdefault('name', 'minimal_device_pol_compass')
+        super().__init__(nb_lenses, field_of_view, degrees, *args, **kwargs)
+        self._phot_angle = self.process_omm_photoreceptor_angle(omm_photoreceptor_angle)
+
+    def _sense(self, sky=None, scene=None):
+        """
+        Transform the photoreceptor signals to POL-neuron responses.
+        Since there is only one photoreceptor, the POL-neuron responses
+        are equal to the response of that one photoreceptor.
+        """
+        r = super(PolarisationSensor, self)._sense(sky=sky, scene=scene)
+        return r
+
 def generate_rings(nb_samples, fov, degrees=True):
     """
     Generates concentric rings based on the number of samples parameter and the field of view, and places the lenses

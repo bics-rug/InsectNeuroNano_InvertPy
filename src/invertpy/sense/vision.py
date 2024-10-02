@@ -118,10 +118,7 @@ class CompoundEye(Sensor):
             c_sensitive = c_sensitive[np.newaxis, ...]
         c_sensitive /= np.maximum(c_sensitive.sum(axis=1), eps)[..., np.newaxis]
 
-        if isinstance(omm_photoreceptor_angle, int):
-            omm_photoreceptor_angle = np.linspace(0, np.pi, omm_photoreceptor_angle, endpoint=False)
-        else:
-            omm_photoreceptor_angle = np.array(omm_photoreceptor_angle)
+        omm_photoreceptor_angle = self.process_omm_photoreceptor_angle(omm_photoreceptor_angle)
 
         self._omm_ori = omm_ori
         self._omm_xyz = omm_xyz
@@ -293,6 +290,14 @@ class CompoundEye(Sensor):
             eye_copy.name = name
 
         return eye_copy
+
+    @staticmethod
+    def process_omm_photoreceptor_angle(omm_photoreceptor_angle):
+        if isinstance(omm_photoreceptor_angle, int):
+            omm_photoreceptor_angle = np.linspace(0, np.pi, omm_photoreceptor_angle, endpoint=False)
+        else:
+            omm_photoreceptor_angle = np.array(omm_photoreceptor_angle)
+        return omm_photoreceptor_angle
 
     @property
     def omm_xyz(self):
