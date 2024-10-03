@@ -15,7 +15,7 @@ __license__ = "MIT"
 __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
-from invertpy.brain.compass import photoreceptor2pol
+from invertpy.brain.compass import photoreceptor2pol, minimaldevice_photoreceptor2pol
 from .vision import CompoundEye
 
 from scipy.spatial.transform import Rotation as R
@@ -104,10 +104,11 @@ class PolarisationSensor(CompoundEye):
 
 
 class MinimalDevicePolarisationSensor(PolarisationSensor):
-    def __init__(self, nb_lenses=3, omm_photoreceptor_angle=1, field_of_view=56, degrees=True, *args, **kwargs):
+    def __init__(self, POL_method, nb_lenses=3, omm_photoreceptor_angle=2, field_of_view=56, degrees=True, *args, **kwargs):
         kwargs.setdefault('name', 'minimal_device_pol_compass')
         super().__init__(nb_lenses, field_of_view, degrees, *args, **kwargs)
         self._phot_angle = self.process_omm_photoreceptor_angle(omm_photoreceptor_angle)
+        self.POL_method = POL_method
 
     def _sense(self, sky=None, scene=None):
         """
@@ -116,7 +117,8 @@ class MinimalDevicePolarisationSensor(PolarisationSensor):
         are equal to the response of that one photoreceptor.
         """
         r = super(PolarisationSensor, self)._sense(sky=sky, scene=scene)
-        return r
+        return np.asarray(minimaldevice_photoreceptor2pol(r, POL_method=self.POL_method, ori=self.omm_ori, nb_receptors=self._phot_angle,
+                                            dtype=self.dtype).reshape((-1, 1)), dtype=self.dtype)
 
 def generate_rings(nb_samples, fov, degrees=True):
     """

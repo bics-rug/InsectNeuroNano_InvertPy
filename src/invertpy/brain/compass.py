@@ -503,6 +503,19 @@ def photoreceptor2pol(r, ori=None, ori_cross=None, nb_receptors=2, dtype='float3
     r_po = photoreceptor2pooling(r)
     return r_op / (r_po + eps)
 
+def minimaldevice_photoreceptor2pol(r, POL_method, ori=None, ori_cross=None, nb_receptors=2, dtype='float32'):
+    if POL_method == "double_sqrt":
+        squared_r = r**2
+        summed_squared_r = np.sum(squared_r, axis=1)
+        return np.sqrt(summed_squared_r)
+    elif POL_method == "double_normalized_contrast":
+        r_op = photoreceptor2opponent(r, ori=ori, ori_cross=ori_cross, nb_receptors=nb_receptors, dtype=dtype)
+        r_po = photoreceptor2pooling(r)
+        return r_op / (r_po + eps)
+    elif POL_method == "single":
+        return r[:, 0]
+    else:
+        raise NotImplementedError("POL_method must be one of: ['single','double_sqrt','double_normalized_contrast']")
 
 def photoreceptor2opponent(r, ori=None, ori_cross=None, nb_receptors=2, dtype='float32'):
     """
