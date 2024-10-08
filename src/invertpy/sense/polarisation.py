@@ -104,7 +104,7 @@ class PolarisationSensor(CompoundEye):
 
 
 class MinimalDevicePolarisationSensor(PolarisationSensor):
-    def __init__(self, POL_method, nb_lenses=3, omm_photoreceptor_angle=2, field_of_view=56, degrees=True, *args, **kwargs):
+    def __init__(self, POL_method="double_sum", nb_lenses=3, omm_photoreceptor_angle=2, field_of_view=56, degrees=True, *args, **kwargs):
         kwargs.setdefault('name', 'minimal_device_pol_compass')
         super().__init__(nb_lenses, field_of_view, degrees, *args, **kwargs)
         self._phot_angle = self.process_omm_photoreceptor_angle(omm_photoreceptor_angle)
