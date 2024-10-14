@@ -508,14 +508,29 @@ def minimaldevice_photoreceptor2pol(r, POL_method, ori=None, ori_cross=None, nb_
         squared_r = r**2
         summed_squared_r = np.sum(squared_r, axis=1)
         return np.sqrt(summed_squared_r)
+    elif POL_method == "double_sum":
+        return np.sum(r, axis=1)
+    elif POL_method == "double_subtraction":
+        return r[:,0] - r[:,1]
+    elif POL_method == "double_subtraction_flipped":
+        return r[:, 1] - r[:, 0]
+    elif POL_method == "double_subtraction_abs":
+        return np.abs(r[:, 0] - r[:, 1])
+    elif POL_method == "double_normalized_contrast_flipped":
+        r_op = photoreceptor2opponent(r[:, ::-1], ori=ori, ori_cross=ori_cross, nb_receptors=nb_receptors, dtype=dtype)
+        r_po = photoreceptor2pooling(r)
+        return r_op / (r_po + eps)
     elif POL_method == "double_normalized_contrast":
         r_op = photoreceptor2opponent(r, ori=ori, ori_cross=ori_cross, nb_receptors=nb_receptors, dtype=dtype)
         r_po = photoreceptor2pooling(r)
         return r_op / (r_po + eps)
-    elif POL_method == "single":
+    elif POL_method == "single_0":
+        # return the I0 photoreceptor's response normalized to (-1,1)
+        return r[:,1] #2 * np.clip(r[:, 1], 0, 0.25) / 0.25 - 1
+    elif POL_method == "single_90":
         return r[:, 0]
     else:
-        raise NotImplementedError("POL_method must be one of: ['single','double_sqrt','double_normalized_contrast']")
+        raise NotImplementedError("POL_method not known")
 
 def photoreceptor2opponent(r, ori=None, ori_cross=None, nb_receptors=2, dtype='float32'):
     """

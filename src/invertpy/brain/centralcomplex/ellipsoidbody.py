@@ -315,6 +315,67 @@ class SimpleCompass(EllipsoidBodyLayer):
     def nb_tl2(self):
         return self._nb_tl2
 
+class MinimalDeviceSteering():
+    def __init__(self, nb_direction=3, nb_memory=3, nb_sigmoid=6, a=0.667, b_s=4.372, *args, **kwargs):
+        self.nb_direction = nb_direction
+        self.nb_memory = nb_memory
+        self.nb_sigmoid = nb_sigmoid
+        self.r_sigmoid_neuron = np.zeros(nb_sigmoid, dtype=np.float32)
+        self.r_steering = np.zeros(2, dtype=np.float32)
+        self.a = a
+        self.b_s = b_s
+
+        self.w_mem2sigmoid = 4 * np.array([
+                            [0,0,0,1,1,0],
+                            [1,0,0,0,0,1],
+                            [0,1,1,0,0,0]
+        ])
+        self.w_dir2sigmoid = 0.71 * np.array([
+                            [1,1,0,0,0,0],
+                            [0,0,1,1,0,0],
+                            [0,0,0,0,1,1]
+        ])
+        self.w_sigmoid2steering = 3.8 * np.array([
+                        [1,0],
+                        [0,1],
+                        [1,0],
+                        [0,1],
+                        [1,0],
+                        [0,1]
+        ])
+
+    def reset(self):
+        self.w_mem2sigmoid = 4 * np.array([
+                            [0,0,0,1,1,0],
+                            [1,0,0,0,0,1],
+                            [0,1,1,0,0,0]
+        ])
+        self.w_dir2sigmoid = 0.71 * np.array([
+                            [1,1,0,0,0,0],
+                            [0,0,1,1,0,0],
+                            [0,0,0,0,1,1]
+        ])
+        self.w_sigmoid2steering = 3.8 * np.array([
+                        [1,0],
+                        [0,1],
+                        [1,0],
+                        [0,1],
+                        [1,0],
+                        [0,1]
+        ])
+        self.r_sigmoid_neuron = np.zeros(self.nb_sigmoid, dtype=np.float32)
+        self.r_steering = np.zeros(2, dtype=np.float32)
+
+    def __call__(self, direction=None, memory=None):
+        memory_input_to_sigmoid_neuron = np.dot(memory, self.w_mem2sigmoid)
+        direction_input_to_sigmoid_neuron = np.dot(direction.T, self.w_dir2sigmoid)
+        sigmoid_neuron = memory_input_to_sigmoid_neuron + direction_input_to_sigmoid_neuron
+        self.r_sigmoid_neuron = sigmoid_neuron
+        sigmoid_neuron_post_activation = 1 / (1 + np.exp(-self.a * sigmoid_neuron + self.b_s))
+        steering = np.dot(sigmoid_neuron_post_activation, self.w_sigmoid2steering)
+        self.r_steering = steering
+        return steering
+
 
 class SimpleSteering(ProtocerebralBridgeLayer):
     def __init__(self, nb_tb1=8, nb_cpu4=16, nb_delta7=None, nb_fbn=None, *args, **kwargs):

@@ -67,7 +67,7 @@ class PolarisationSensor(CompoundEye):
             kwargs.setdefault('omm_ori', R.from_euler('ZYX', omm_euler, degrees=False))
         kwargs.setdefault('omm_rho', np.deg2rad(5.4))
         kwargs.setdefault('omm_pol_op', 1)
-        kwargs.setdefault('c_sensitive', [0, 0, 0, 0, 1])
+        kwargs.setdefault('c_sensitive', [0, 0, 1, 0, 0])
         kwargs.setdefault('name', 'pol_compass')
         kwargs.setdefault('nb_output', (nb_inputs,))
         super().__init__(*args, **kwargs)
@@ -104,21 +104,21 @@ class PolarisationSensor(CompoundEye):
 
 
 class MinimalDevicePolarisationSensor(PolarisationSensor):
-    def __init__(self, POL_method="double_sum", nb_lenses=3, omm_photoreceptor_angle=2, field_of_view=56, degrees=True, *args, **kwargs):
+    def __init__(self, POL_method="single_0", nb_lenses=3, omm_photoreceptor_angle=2, field_of_view=56, degrees=True, *args, **kwargs):
         kwargs.setdefault('name', 'minimal_device_pol_compass')
         super().__init__(nb_lenses, field_of_view, degrees, *args, **kwargs)
         self._phot_angle = self.process_omm_photoreceptor_angle(omm_photoreceptor_angle)
         self.POL_method = POL_method
+        self.r_POL = np.zeros(nb_lenses)
 
     def _sense(self, sky=None, scene=None):
         """
         Transform the photoreceptor signals to POL-neuron responses.
-        Since there is only one photoreceptor, the POL-neuron responses
-        are equal to the response of that one photoreceptor.
         """
         r = super(PolarisationSensor, self)._sense(sky=sky, scene=scene)
-        return np.asarray(minimaldevice_photoreceptor2pol(r, POL_method=self.POL_method, ori=self.omm_ori, nb_receptors=self._phot_angle,
-                                            dtype=self.dtype).reshape((-1, 1)), dtype=self.dtype)
+        self.r_POL = np.asarray(minimaldevice_photoreceptor2pol(r, POL_method=self.POL_method, ori=self.omm_ori, nb_receptors=self._phot_angle,
+                                            dtype=self.dtype), dtype=self.dtype)
+        return self.r_POL
 
 def generate_rings(nb_samples, fov, degrees=True):
     """
@@ -152,7 +152,10 @@ def generate_rings(nb_samples, fov, degrees=True):
         theta = 90 + r * v_angles + v_angles / 2
         h_angles = 360. / samples
         for c in range(samples):
-            phi = c * h_angles + h_angles / 2
+            if samples % 2 == 0:
+                phi = c * h_angles
+            else:
+                phi = c * h_angles + h_angles / 2
             phis[i] = np.deg2rad(phi)
             thetas[i] = np.deg2rad(-theta)
             i += 1

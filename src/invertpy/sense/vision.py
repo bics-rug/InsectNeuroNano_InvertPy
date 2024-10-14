@@ -234,11 +234,13 @@ class CompoundEye(Sensor):
 
         # apply the opponent polarisation filters
         op = self._omm_pol.reshape((-1, 1))
-        pol_main = (self._ori * self.omm_ori).as_euler('ZYX', degrees=False)[..., 0].reshape((-1, 1))
+        euler = (self._ori * self.omm_ori).as_euler('ZYX', degrees=False)
+        azi = euler[..., 0].reshape((-1, 1))
+        pol_main = euler[..., 2].reshape((-1, 1))
 
         # calculate the responses for the 2 opponent photo-receptors
-        s = y0 * ((np.square(np.sin(a0 - pol_main + self._phot_angle[np.newaxis, :])) +
-                   np.square(np.cos(a0 - pol_main + self._phot_angle[np.newaxis, :])) * np.square(1. - p0)) * op +
+        s = y0 * ((np.square(np.cos(azi + pol_main - a0 + self._phot_angle[np.newaxis, :])) +
+                   np.square(np.sin(azi + pol_main - a0 + self._phot_angle[np.newaxis, :])) * np.square(1. - p0)) * op +
                   (1. - op))
 
         # clip the responses to 1 as the incoming radiation gets saturated
