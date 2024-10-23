@@ -365,15 +365,47 @@ class MinimalDeviceSteering():
         ])
         self.r_sigmoid_neuron = np.zeros(self.nb_sigmoid, dtype=np.float32)
         self.r_steering = np.zeros(2, dtype=np.float32)
+        self.r_steering_diff = np.zeros(1, dtype=np.float32)
 
     def __call__(self, direction=None, memory=None):
         memory_input_to_sigmoid_neuron = np.dot(memory, self.w_mem2sigmoid)
         direction_input_to_sigmoid_neuron = np.dot(direction.T, self.w_dir2sigmoid)
         sigmoid_neuron = memory_input_to_sigmoid_neuron + direction_input_to_sigmoid_neuron
+
+        def step_function(x):
+            if x < 0:
+                return 0
+            else:
+                return 1
+
+        # sigmoid_neuron = np.zeros(6)
+        # sigmoid_neuron[0] = memory[0]/direction[0] * step_function(direction[2]-direction[1])
+        # sigmoid_neuron[1] = memory[0]/direction[0] * step_function(-(direction[2]-direction[1]))
+        # sigmoid_neuron[2] = memory[1]/direction[1] * step_function(direction[0]-direction[2])
+        # sigmoid_neuron[3] = memory[1]/direction[1] * step_function(-(direction[0]-direction[2]))
+        # sigmoid_neuron[4] = memory[2]/direction[2] * step_function(direction[1]-direction[0])
+        # sigmoid_neuron[5] = memory[2]/direction[2] * step_function(-(direction[1]-direction[0]))
+        #
+        # sigmoid_neuron[1] = direction[1]+direction[2] - memory[0]
+        # sigmoid_neuron[3] = direction[0]+direction[1] - memory[1]
+        # sigmoid_neuron[5] = direction[0]+direction[1] - memory[2]
+        # sigmoid_neuron[0] = -direction[1]-direction[2] + memory[0]
+        # sigmoid_neuron[2] = -direction[0]-direction[1] + memory[1]
+        # sigmoid_neuron[4] = -direction[0]-direction[1] + memory[2]
+
+        # sigmoid_neuron[1] = direction[0]+direction[2] - memory[0]
+        # sigmoid_neuron[3] = direction[1]+direction[0] - memory[1]
+        # sigmoid_neuron[5] = direction[2]+direction[1] - memory[2]
+        # sigmoid_neuron[0] = -(direction[0]+direction[2]) + memory[0]
+        # sigmoid_neuron[2] = -(direction[1]+direction[0]) + memory[1]
+        # sigmoid_neuron[4] = -(direction[2]+direction[1]) + memory[2]
+
         self.r_sigmoid_neuron = sigmoid_neuron
         sigmoid_neuron_post_activation = 1 / (1 + np.exp(-self.a * sigmoid_neuron + self.b_s))
+
         steering = np.dot(sigmoid_neuron_post_activation, self.w_sigmoid2steering)
         self.r_steering = steering
+        self.r_steering_diff = steering[0] - steering[1]
         return steering
 
 

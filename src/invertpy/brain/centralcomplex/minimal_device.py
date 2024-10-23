@@ -133,6 +133,10 @@ class MinimalDeviceCX(CentralComplexBase):
         return self.steering.r_steering
 
     @property
+    def r_steering_diff(self):
+        return self.steering.r_steering_diff
+
+    @property
     def r_motor(self):
         return self.steering.r_steering.dot(self.w_steering2motor)
 

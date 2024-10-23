@@ -116,8 +116,13 @@ class MinimalDevicePolarisationSensor(PolarisationSensor):
         Transform the photoreceptor signals to POL-neuron responses.
         """
         r = super(PolarisationSensor, self)._sense(sky=sky, scene=scene)
-        self.r_POL = np.asarray(minimaldevice_photoreceptor2pol(r, POL_method=self.POL_method, ori=self.omm_ori, nb_receptors=self._phot_angle,
+        POL_reponses = np.asarray(minimaldevice_photoreceptor2pol(r, POL_method=self.POL_method, ori=self.omm_ori, nb_receptors=self._phot_angle,
                                             dtype=self.dtype), dtype=self.dtype)
+        POL_reponses_3 = np.zeros(3)
+        POL_reponses_3[0] = POL_reponses[1] - POL_reponses[4]
+        POL_reponses_3[1] = POL_reponses[3] - POL_reponses[0]
+        POL_reponses_3[2] = POL_reponses[5] - POL_reponses[2]
+        self.r_POL = POL_reponses_3
         return self.r_POL
 
 def generate_rings(nb_samples, fov, degrees=True):

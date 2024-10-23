@@ -195,7 +195,6 @@ class MinimalDevicePathIntegratorLayer():
     def reset(self):
         self.w_dir2mem = diagonal_synapses(self.nb_direction, self.nb_memory, fill_value=0.0115, dtype=np.float32)
         self.r_memory[:] = 0
-        self.update = True
 
     def __call__(self, direction=None):
         current_direction_mem_input = direction.T.dot(self.w_dir2mem)
@@ -203,7 +202,7 @@ class MinimalDevicePathIntegratorLayer():
         if self.update:
             memory = self.mem_update(current_direction_mem_input)
         else:
-            memory = current_direction_mem_input
+            memory = -current_direction_mem_input
 
         # this creates a problem with vector memories
         # memory = np.clip(memory, 0., 1.)
@@ -211,7 +210,7 @@ class MinimalDevicePathIntegratorLayer():
         return memory_activation
 
     def mem_update(self, mem_input):
-        self.r_memory[:] = self.r_memory + (mem_input - self.r_memory) / self.tau
+        self.r_memory[:] = self.r_memory - (mem_input - self.r_memory) / self.tau
         return self.r_memory
 
     def reset_integrator(self):
