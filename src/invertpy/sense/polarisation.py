@@ -123,6 +123,7 @@ class MinimalDevicePolarisationSensor(PolarisationSensor):
             POL_responses_3[0] = POL_responses[1] - POL_responses[4]
             POL_responses_3[1] = POL_responses[3] - POL_responses[0]
             POL_responses_3[2] = POL_responses[5] - POL_responses[2]
+            POL_responses_3 = POL_responses_3 + 1 # make all responses positive (from range (-1,1) to (0,2))
         else:
             POL_responses_3 = POL_responses
         self.r_POL = POL_responses_3

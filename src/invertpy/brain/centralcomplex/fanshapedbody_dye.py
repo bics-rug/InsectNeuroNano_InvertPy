@@ -7,6 +7,147 @@ AVOGADRO_CONSTANT = 6.02214076e+23  # /mol
 PLANK_CONSTANT = 6.62597915e-34  # J s
 SPEED_OF_LIGHT = 299792458  # m/s
 
+class MinimalDevicePathIntegrationDyeLayer(fb.MinimalDevicePathIntegratorLayer):
+    """
+    Ceberg and Nilsson model.
+    """
+
+    epsilon: np.ndarray[float]
+    """The molar absorption coefficient."""
+
+    length: np.ndarray[float]
+    """The optical path length through the sample."""
+
+    k: np.ndarray[float]
+    """The rate coefficient (related to half-life as k = log(2) / T_half)."""
+
+    phi: np.ndarray[float]
+    """The proportion of the absorbed light that leads to switching (quantum yield)."""
+
+    c_tot: np.ndarray[float]
+    """The total concentration of dye molecules per unit."""
+
+    model_transmittance: bool
+    """
+    If True, the transmittance is computed as T = 10^(-A), A = epsilon * length * (c_tot - c).
+    If False, this is simplified to T = c / c_tot.
+    """
+
+    def __init__(self, *args, epsilon=None, length=None, k=None, phi=None, c_tot=None,
+                 volume=None, wavelength=None, w_max=None,
+                 mem_initial=None, dt=0.5, **kwargs):
+        """
+
+        Parameters
+        ----------
+        epsilon: float
+            the molar absorption coefficient.
+        length: float
+            the optical path length through the sample.
+        T_half: float
+            the half-life of the molecules in their OFF state (the metastable photostationary state)
+        k: np.ndarray[float], float, None
+            the rate coefficient (related to half-life as k = log(2) / T_half).
+        beta: float
+            the background activity.
+        phi: float
+            the proportion of the absorbed light that leads to switching (quantum yield).
+        c_tot: float
+            the total concentration of dye molecules per unit.
+        volume
+        wavelength
+        w_max
+        parameter_noise: float
+            the noise to add to the parameters.
+        model_transmittance: bool
+            If True, the transmittance is computed as T = 10^(-A), A = epsilon * length * (c_tot - c).
+            If False, this is simplified to T = c / c_tot.
+        mem_initial: np.ndarray[float], float, None
+            the initial memory. Default is 0.
+        start_at_stable: bool
+            If True and the mem_initial is None, it calculates a stable initial memory.
+        """
+
+        fb.MinimalDevicePathIntegratorLayer.__init__(self, *args, **kwargs)
+
+        if mem_initial:
+            self.reset_integrator(mem_initial)
+
+        #self.beta = beta
+        self.dt = dt
+
+
+        self.epsilon = epsilon if epsilon else 1.58e05
+        self.length = length if length else 2.5e-04
+        self.phi = phi if phi else 0.002
+        self.wavelength = wavelength if wavelength else 653.0e-09
+        self.w_max = w_max if w_max else 1.30e-07
+        self.k = k if k else 6.28e-05
+        self.c_tot = c_tot if c_tot else 6.58e-06
+        self.volume = volume if volume else 9.60e-11
+
+        E = PLANK_CONSTANT * SPEED_OF_LIGHT / self.wavelength
+        self.k_phi = self.w_max / (E * self.volume * AVOGADRO_CONSTANT)
+
+        self.last_c = np.zeros_like(self.nb_memory)
+
+    def __call__(self, direction=None):
+        current_direction_mem_input = direction.T.dot(self.w_dir2mem)
+        if self.update:
+            memory = self.mem_update(current_direction_mem_input)
+        else:
+            memory = current_direction_mem_input
+
+        # this creates a problem with vector memories
+        # memory = np.clip(memory, 0., 1.)
+        memory_activation = 1 / (1 + np.exp(-memory + self.b_c))
+        return -memory_activation
+
+    def mem_update(self, mem_input):
+        self.last_c = np.clip(self.last_c + self.dcdt(mem_input)(0, self.last_c) * self.dt, 0, 1)
+        self.r_memory = self.transmittance(self.last_c)
+        return self.r_memory / 10
+
+    def transmittance(self, c):
+        """
+        The transmittance corresponds to the weight of the synapse
+
+        Parameters
+        ----------
+        c: np.ndarray[float]
+            the OFF-state concentration (c_OFF)
+
+        Returns
+        -------
+        np.ndarray[float]
+            the transmittance
+        """
+
+        return transmittance(c, self.epsilon, self.length, self.c_tot)
+
+    def dcdt(self, u):
+        """
+
+        Parameters
+        ----------
+        u: np.ndarray[float]
+            the PFN output, i.e., its normalised activity
+
+        Returns
+        -------
+        Callable
+            the dc/dt function.
+        """
+
+        return dcdt(u, self.transmittance, k=self.k, phi=self.phi)
+
+    def reset_integrator(self, c0=None):
+        fb.MinimalDevicePathIntegratorLayer.reset_integrator(self)
+        if c0 is None:
+            self.last_c[:] = np.zeros_like(self.last_c)
+        else:
+            self.last_c[:] = np.ones_like(self.last_c) * c0
+
 
 class PathIntegrationDyeLayer(fb.PathIntegratorLayer):
     """

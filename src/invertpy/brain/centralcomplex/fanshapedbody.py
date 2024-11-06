@@ -202,15 +202,15 @@ class MinimalDevicePathIntegratorLayer():
         if self.update:
             memory = self.mem_update(current_direction_mem_input)
         else:
-            memory = -current_direction_mem_input
+            memory = current_direction_mem_input
 
         # this creates a problem with vector memories
         # memory = np.clip(memory, 0., 1.)
         memory_activation = 1 / (1 + np.exp(-memory + self.b_c))
-        return memory_activation
+        return -memory_activation
 
     def mem_update(self, mem_input):
-        self.r_memory[:] = self.r_memory - (mem_input - self.r_memory) / self.tau
+        self.r_memory[:] = self.r_memory + (mem_input - self.r_memory) / self.tau
         return self.r_memory
 
     def reset_integrator(self):

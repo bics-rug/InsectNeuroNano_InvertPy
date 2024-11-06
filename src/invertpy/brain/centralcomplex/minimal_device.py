@@ -13,6 +13,7 @@ import warnings
 from .centralcomplex import CentralComplexBase
 from .ellipsoidbody import SimpleCompass, PontineSteering, MinimalDeviceSteering
 from .fanshapedbody import PathIntegratorLayer, MinimalDevicePathIntegratorLayer
+from .fanshapedbody_dye import MinimalDevicePathIntegrationDyeLayer
 from ._helpers import tn_axes
 from invertpy.sense.polarisation import MinimalDevicePolarisationSensor
 from invertpy.brain.synapses import chessboard_synapses
@@ -22,7 +23,7 @@ import numpy as np
 
 class MinimalDeviceCX(CentralComplexBase):
 
-    def __init__(self, POL_method="single_0", omm_photoreceptor_angle=2, field_of_view=56, degrees=True, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True, nb_sigmoid=6, nb_steer=2, a=0.667, b_s=4.372, *args, **kwargs):
+    def __init__(self, POL_method="single_0", omm_photoreceptor_angle=2, field_of_view=56, degrees=True, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True, use_dye=False, nb_sigmoid=6, nb_steer=2, a=0.667, b_s=4.372, *args, **kwargs):
         """
         The Central Complex model of [1]_ as a component of the locust brain.
 
@@ -46,7 +47,10 @@ class MinimalDeviceCX(CentralComplexBase):
         super().__init__(*args, **kwargs)
 
         self["compass"] = MinimalDevicePolarisationSensor(POL_method, nb_lenses=nb_direction, omm_photoreceptor_angle=omm_photoreceptor_angle, field_of_view=field_of_view, degrees=degrees, *args, **kwargs)
-        self["memory"] = MinimalDevicePathIntegratorLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update)
+        if use_dye:
+            self["memory"] = MinimalDevicePathIntegrationDyeLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update)
+        else:
+            self["memory"] = MinimalDevicePathIntegratorLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update)
         self["steering"] = MinimalDeviceSteering(nb_direction=nb_direction, nb_memory=nb_memory, nb_sigmoid=nb_sigmoid, nb_steer=nb_steer, a=a, b_s=b_s)
 
         self.nb_direction = nb_direction
