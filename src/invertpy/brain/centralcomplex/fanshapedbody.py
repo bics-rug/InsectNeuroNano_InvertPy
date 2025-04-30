@@ -181,7 +181,7 @@ class FanShapedBodyLayer(CentralComplexLayer):
         return self._nb_output
 
 class MinimalDevicePathIntegratorLayer():
-    def __init__(self, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True):
+    def __init__(self, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True, sigmoid_bool=True):
 
         self.nb_direction = nb_direction
         self.nb_memory = nb_memory
@@ -191,6 +191,7 @@ class MinimalDevicePathIntegratorLayer():
         self.tau = tau
         self.b_c = b_c
         self.update = update
+        self.sigmoid_activation = sigmoid_bool
 
     def reset(self):
         self.w_dir2mem = diagonal_synapses(self.nb_direction, self.nb_memory, fill_value=0.0115, dtype=np.float32)
@@ -206,7 +207,8 @@ class MinimalDevicePathIntegratorLayer():
 
         # this creates a problem with vector memories
         # memory = np.clip(memory, 0., 1.)
-        memory_activation = 1 / (1 + np.exp(-memory + self.b_c))
+        if self.sigmoid_activation:
+            memory_activation = 1 / (1 + np.exp(-memory + self.b_c))
         return -memory_activation
 
     def mem_update(self, mem_input):
