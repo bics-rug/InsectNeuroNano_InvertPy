@@ -35,7 +35,7 @@ class MinimalDevicePathIntegrationDyeLayer(fb.MinimalDevicePathIntegratorLayer):
 
     def __init__(self, *args, epsilon=None, length=None, k=None, phi=None, c_tot=None,
                  volume=None, wavelength=None, w_max=None,
-                 mem_initial=None, dt=0.5, **kwargs):
+                 mem_initial=None, dt=0.5, sigmoid_bool, **kwargs):
         """
 
         Parameters
@@ -90,6 +90,7 @@ class MinimalDevicePathIntegrationDyeLayer(fb.MinimalDevicePathIntegratorLayer):
         self.k_phi = self.w_max / (E * self.volume * AVOGADRO_CONSTANT)
 
         self.last_c = np.zeros_like(self.nb_memory)
+        self.sigmoid_activation = sigmoid_bool
 
     def __call__(self, direction=None):
         current_direction_mem_input = direction.T.dot(self.w_dir2mem)
@@ -100,7 +101,8 @@ class MinimalDevicePathIntegrationDyeLayer(fb.MinimalDevicePathIntegratorLayer):
 
         # this creates a problem with vector memories
         # memory = np.clip(memory, 0., 1.)
-        memory_activation = 1 / (1 + np.exp(-memory + self.b_c))
+        if self.sigmoid_activation:
+            memory_activation = 1 / (1 + np.exp(-memory + self.b_c))
         return -memory_activation
 
     def mem_update(self, mem_input):
