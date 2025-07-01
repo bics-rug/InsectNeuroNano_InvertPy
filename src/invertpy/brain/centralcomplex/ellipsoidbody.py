@@ -316,7 +316,7 @@ class SimpleCompass(EllipsoidBodyLayer):
         return self._nb_tl2
 
 class MinimalDeviceSteering():
-    def __init__(self, nb_direction=3, nb_memory=3, nb_sigmoid=6, a=0.667, b_s=4.372, *args, **kwargs):
+    def __init__(self, nb_direction=3, nb_memory=3, nb_sigmoid=6, a=0.667, b_s=4.372, communication_downscaling_factor=100, communication_noise_factor=0, transmittance_per_distance_oom=0, *args, **kwargs):
         self.nb_direction = nb_direction
         self.nb_memory = nb_memory
         self.nb_sigmoid = nb_sigmoid
@@ -343,6 +343,21 @@ class MinimalDeviceSteering():
                         [1,0],
                         [0,1]
         ])
+
+        # Downscale weights and add uniform noise (emitter-receiver imperfect communication)
+        self.w_dir2sigmoid *= communication_downscaling_factor / 100
+        noise_range = np.max(self.w_dir2sigmoid) * communication_noise_factor / 100
+        noise = np.random.uniform(-noise_range, noise_range, size=self.w_dir2sigmoid.shape)
+        self.w_dir2sigmoid += noise
+
+        self.w_mem2sigmoid = self.w_mem2sigmoid * communication_downscaling_factor / 100.0
+        noise_range = np.max(self.w_mem2sigmoid) * communication_noise_factor / 100
+        noise = np.random.uniform(-noise_range, noise_range, size=self.w_mem2sigmoid.shape)
+        self.w_mem2sigmoid += noise
+
+        # Decrease weights by oom (proportional to distance between nanowires)
+        self.w_dir2sigmoid /= 10**transmittance_per_distance_oom
+        self.w_mem2sigmoid /= 10**transmittance_per_distance_oom
 
     def reset(self):
         self.w_mem2sigmoid = 4 * np.array([
@@ -377,28 +392,6 @@ class MinimalDeviceSteering():
                 return 0
             else:
                 return 1
-
-        # sigmoid_neuron = np.zeros(6)
-        # sigmoid_neuron[0] = memory[0]/direction[0] * step_function(direction[2]-direction[1])
-        # sigmoid_neuron[1] = memory[0]/direction[0] * step_function(-(direction[2]-direction[1]))
-        # sigmoid_neuron[2] = memory[1]/direction[1] * step_function(direction[0]-direction[2])
-        # sigmoid_neuron[3] = memory[1]/direction[1] * step_function(-(direction[0]-direction[2]))
-        # sigmoid_neuron[4] = memory[2]/direction[2] * step_function(direction[1]-direction[0])
-        # sigmoid_neuron[5] = memory[2]/direction[2] * step_function(-(direction[1]-direction[0]))
-        #
-        # sigmoid_neuron[1] = direction[1]+direction[2] - memory[0]
-        # sigmoid_neuron[3] = direction[0]+direction[1] - memory[1]
-        # sigmoid_neuron[5] = direction[0]+direction[1] - memory[2]
-        # sigmoid_neuron[0] = -direction[1]-direction[2] + memory[0]
-        # sigmoid_neuron[2] = -direction[0]-direction[1] + memory[1]
-        # sigmoid_neuron[4] = -direction[0]-direction[1] + memory[2]
-
-        # sigmoid_neuron[1] = direction[0]+direction[2] - memory[0]
-        # sigmoid_neuron[3] = direction[1]+direction[0] - memory[1]
-        # sigmoid_neuron[5] = direction[2]+direction[1] - memory[2]
-        # sigmoid_neuron[0] = -(direction[0]+direction[2]) + memory[0]
-        # sigmoid_neuron[2] = -(direction[1]+direction[0]) + memory[1]
-        # sigmoid_neuron[4] = -(direction[2]+direction[1]) + memory[2]
 
         self.r_sigmoid_neuron = sigmoid_neuron
         sigmoid_neuron_post_activation = 1 / (1 + np.exp(-self.a * sigmoid_neuron + self.b_s))

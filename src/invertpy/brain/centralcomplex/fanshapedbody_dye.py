@@ -35,7 +35,7 @@ class MinimalDevicePathIntegrationDyeLayer(fb.MinimalDevicePathIntegratorLayer):
 
     def __init__(self, *args, epsilon=None, length=None, k=None, phi=None, c_tot=None,
                  volume=None, wavelength=None, w_max=None,
-                 mem_initial=None, dt=0.5, sigmoid_bool, **kwargs):
+                 mem_initial=None, dt=0.5, sigmoid_bool=False, communication_downscaling_factor=100, communication_noise_factor=0, transmittance_per_distance_oom=0, **kwargs):
         """
 
         Parameters
@@ -91,6 +91,15 @@ class MinimalDevicePathIntegrationDyeLayer(fb.MinimalDevicePathIntegratorLayer):
 
         self.last_c = np.zeros_like(self.nb_memory)
         self.sigmoid_activation = sigmoid_bool
+
+        # Downscale weights and add uniform noise
+        self.w_dir2mem *= communication_downscaling_factor / 100
+        noise_range = np.max(self.w_dir2mem) * communication_noise_factor / 100
+        noise = np.random.uniform(-noise_range, noise_range, size=self.w_dir2mem.shape)
+        self.w_dir2mem += noise
+
+        # Decrease weights by oom (proportional to distance between nanowires)
+        self.w_dir2mem /= 10**transmittance_per_distance_oom
 
     def __call__(self, direction=None):
         current_direction_mem_input = direction.T.dot(self.w_dir2mem)
