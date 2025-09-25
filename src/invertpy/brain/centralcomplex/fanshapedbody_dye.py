@@ -35,7 +35,7 @@ class MinimalDevicePathIntegrationDyeLayer(fb.MinimalDevicePathIntegratorLayer):
 
     def __init__(self, *args, epsilon=None, length=None, k=None, phi=None, c_tot=None,
                  volume=None, wavelength=None, w_max=None,
-                 mem_initial=None, dt=0.5, sigmoid_bool=False, communication_downscaling_factor=100, communication_noise_factor=0, transmittance_per_distance_oom=0, **kwargs):
+                 mem_initial=None, dt=0.5, sigmoid_bool=False, nanowire_sigmoid=False, nanowire_sigmoid_dev=0, communication_noise_factor=0, total_downscaling_factor=0, **kwargs):
         """
 
         Parameters
@@ -91,32 +91,57 @@ class MinimalDevicePathIntegrationDyeLayer(fb.MinimalDevicePathIntegratorLayer):
 
         self.last_c = np.zeros_like(self.nb_memory)
         self.sigmoid_activation = sigmoid_bool
+        self.nanowire_sigmoid = nanowire_sigmoid
+        self.nanowire_sigmoid_dev = nanowire_sigmoid_dev
 
+        print('before',self.w_dir2mem)
+        self.w_dir2mem_p = self.w_dir2mem.copy()
         # Downscale weights and add uniform noise
-        self.w_dir2mem *= communication_downscaling_factor / 100
-        noise_range = np.max(self.w_dir2mem) * communication_noise_factor / 100
-        noise = np.random.uniform(-noise_range, noise_range, size=self.w_dir2mem.shape)
-        self.w_dir2mem += noise
+        #self.w_dir2mem_p *= communication_downscaling_factor / 100
+        noise_range = np.max(self.w_dir2mem_p) * communication_noise_factor / 100
+        np.random.seed(0)
+        noise = np.random.uniform(-noise_range, noise_range, size=self.w_dir2mem_p.shape)
+        self.w_dir2mem_p += noise
 
         # Decrease weights by oom (proportional to distance between nanowires)
-        self.w_dir2mem /= 10**transmittance_per_distance_oom
+        #self.w_dir2mem_p /= 10**transmittance_per_distance_oom
+
+        self.w_dir2mem_p /= total_downscaling_factor
+        print('after',self.w_dir2mem_p)
 
     def __call__(self, direction=None):
         current_direction_mem_input = direction.T.dot(self.w_dir2mem)
+        current_direction_mem_input_p = direction.T.dot(self.w_dir2mem_p)
+        print('current dir',current_direction_mem_input,current_direction_mem_input_p)
+        #test_current_direction_mem_input = direction.T.dot(self.w_dir2mem*10)
+        #print('direction',direction,'weights',self.w_dir2mem, 'dot',direction.T.dot(self.w_dir2mem), 'mem update',self.mem_update(current_direction_mem_input))
+        #print('direction',direction,'weights',10*self.w_dir2mem, 'dot',direction.T.dot(10*self.w_dir2mem), 'mem update',self.mem_update(test_current_direction_mem_input))
+
         if self.update:
-            memory = self.mem_update(current_direction_mem_input)
+            memory = self.mem_update(current_direction_mem_input_p)
         else:
             memory = current_direction_mem_input
 
         # this creates a problem with vector memories
         # memory = np.clip(memory, 0., 1.)
         if self.sigmoid_activation:
-            memory_activation = 1 / (1 + np.exp(-memory + self.b_c))
+            if self.nanowire_sigmoid:
+                coefficients = [-0.15178579,  0.32222505,  0.64565088]
+                coefficients = coefficients * (1 + self.nanowire_sigmoid_dev * np.random.randn(len(coefficients)))
+                polynomial = np.poly1d(coefficients)
+                memory_activation = polynomial(memory)
+            else:
+                memory_activation = 1 / (1 + np.exp(-memory + self.b_c))
         return -memory_activation
 
     def mem_update(self, mem_input):
+        print('mem update',mem_input,self.last_c,self.r_memory)
+        last_c = np.clip(self.last_c + self.dcdt(mem_input)(0, self.last_c) * self.dt, 0, 1)
+        r_memory = self.transmittance(last_c)
+        print('clean',last_c,r_memory)
         self.last_c = np.clip(self.last_c + self.dcdt(mem_input)(0, self.last_c) * self.dt, 0, 1)
         self.r_memory = self.transmittance(self.last_c)
+        print('modified',self.last_c,self.r_memory)
         return self.r_memory / 10
 
     def transmittance(self, c):

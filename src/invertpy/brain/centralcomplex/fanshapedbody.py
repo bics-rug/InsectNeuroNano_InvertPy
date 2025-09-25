@@ -12,6 +12,7 @@ import numpy as np
 
 from invertpy.brain.synapses import *
 from invertpy.brain.activation import sigmoid, relu
+from invertpy.sense.adex_memory import MemoryAdExNeuron
 
 from .centralcomplex import CentralComplexLayer
 from ._helpers import decode_vector
@@ -181,8 +182,9 @@ class FanShapedBodyLayer(CentralComplexLayer):
         return self._nb_output
 
 class MinimalDevicePathIntegratorLayer():
-    def __init__(self, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True, sigmoid_bool=True):
+    def __init__(self, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True, sigmoid_bool=True, spiking=False):
 
+        self.w_dir2mem_p = None
         self.nb_direction = nb_direction
         self.nb_memory = nb_memory
         self.r_memory = np.zeros(self.nb_memory, dtype=np.float32)
@@ -192,31 +194,59 @@ class MinimalDevicePathIntegratorLayer():
         self.b_c = b_c
         self.update = update
         self.sigmoid_activation = sigmoid_bool
+        self.spiking = spiking
+
+        #AdEx neuron replaces leaky memory
+        self.adex_neuron_1 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
+        self.adex_neuron_2 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
+        self.adex_neuron_3 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
 
     def reset(self):
         self.w_dir2mem = diagonal_synapses(self.nb_direction, self.nb_memory, fill_value=0.0115, dtype=np.float32)
         self.r_memory[:] = 0
+        self.adex_neuron_1.reset()
+        self.adex_neuron_2.reset()
+        self.adex_neuron_3.reset()
 
     def __call__(self, direction=None):
-        current_direction_mem_input = direction.T.dot(self.w_dir2mem)
-
+        if self.spiking:
+            current_direction_mem_input = direction * self.w_dir2mem[0][0]
+        else:
+            current_direction_mem_input = direction.T.dot(self.w_dir2mem)
         if self.update:
-            memory = self.mem_update(current_direction_mem_input)
+            if self.spiking:
+                memory = self.spiking_mem_update(current_direction_mem_input)
+            else:
+                memory = self.mem_update(current_direction_mem_input)
+                if self.sigmoid_activation:
+                    memory = 1 / (1 + np.exp(-memory + self.b_c))
         else:
             memory = current_direction_mem_input
-
-        # this creates a problem with vector memories
-        # memory = np.clip(memory, 0., 1.)
-        if self.sigmoid_activation:
-            memory_activation = 1 / (1 + np.exp(-memory + self.b_c))
-        return -memory_activation
+            if self.sigmoid_activation:
+                memory = 1 / (1 + np.exp(-memory + self.b_c))
+        return memory
 
     def mem_update(self, mem_input):
         self.r_memory[:] = self.r_memory + (mem_input - self.r_memory) / self.tau
+        print('kk',self.r_memory)
         return self.r_memory
+
+    def spiking_mem_update(self, mem_input):
+        """
+        mem_input: 1000-length spike train from D node, scaled by 0.0115
+        Returns: total spike count of the AdEx neuron over 1000 timesteps
+        """
+        spike_count_1 = self.adex_neuron_1.simulate_spike_train(mem_input[0])
+        spike_count_2 = self.adex_neuron_2.simulate_spike_train(mem_input[1])
+        spike_count_3 = self.adex_neuron_3.simulate_spike_train(mem_input[2])
+        spike_counts = np.array([spike_count_1,spike_count_2,spike_count_3])
+        return spike_counts
 
     def reset_integrator(self):
         self.r_memory[:] = 0
+        self.adex_neuron_1.reset()
+        self.adex_neuron_2.reset()
+        self.adex_neuron_3.reset()
 
 class MinimalDevicePathIntegratorLayerNanowires():
     def __init__(self, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True, sigmoid_bool=True):

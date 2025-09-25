@@ -17,6 +17,7 @@ __maintainer__ = "Evripidis Gkanias"
 
 from invertpy.brain.compass import photoreceptor2pol, minimaldevice_photoreceptor2pol
 from .vision import CompoundEye
+from .DD_spike_encoder import generate_spike_trains
 
 from scipy.spatial.transform import Rotation as R
 
@@ -104,12 +105,13 @@ class PolarisationSensor(CompoundEye):
 
 
 class MinimalDevicePolarisationSensor(PolarisationSensor):
-    def __init__(self, POL_method="single_0", nb_lenses=3, omm_photoreceptor_angle=2, field_of_view=56, degrees=True, *args, **kwargs):
+    def __init__(self, POL_method="single_0", nb_lenses=3, omm_photoreceptor_angle=2, field_of_view=56, degrees=True, spiking=False, *args, **kwargs):
         kwargs.setdefault('name', 'minimal_device_pol_compass')
         super().__init__(nb_lenses, field_of_view, degrees, *args, **kwargs)
         self._phot_angle = self.process_omm_photoreceptor_angle(omm_photoreceptor_angle)
         self.POL_method = POL_method
         self.r_POL = np.zeros(nb_lenses)
+        self.spiking = spiking
 
     def _sense(self, sky=None, scene=None):
         """
@@ -128,7 +130,19 @@ class MinimalDevicePolarisationSensor(PolarisationSensor):
         else:
             POL_responses_3 = POL_responses
         self.r_POL = POL_responses_3
-        return self.r_POL
+
+        self.r_POL = (self.r_POL ** 4) * 8
+
+        if self.spiking:
+            spike_trains = np.zeros((3,1000))
+            for i in range(3):
+                spike_train = generate_spike_trains(self.r_POL[i], time_window=1000)
+                spike_train = np.array(spike_train).reshape(1000)
+                spike_trains[i,:] = spike_train
+            spike_trains = np.array(spike_trains)
+            return spike_trains
+        else:
+            return self.r_POL
 
 def generate_rings(nb_samples, fov, degrees=True):
     """

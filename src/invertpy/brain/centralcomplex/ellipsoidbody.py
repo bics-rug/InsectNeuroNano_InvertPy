@@ -14,7 +14,7 @@ from invertpy.brain.synapses import *
 from invertpy.brain.activation import sigmoid
 
 from .centralcomplex import CentralComplexLayer
-
+from invertpy.sense.LIF_sigmoid_node import LIFNeuron
 
 class EllipsoidBodyLayer(CentralComplexLayer):
 
@@ -316,7 +316,7 @@ class SimpleCompass(EllipsoidBodyLayer):
         return self._nb_tl2
 
 class MinimalDeviceSteering():
-    def __init__(self, nb_direction=3, nb_memory=3, nb_sigmoid=6, a=0.667, b_s=4.372, communication_downscaling_factor=100, communication_noise_factor=0, transmittance_per_distance_oom=0, *args, **kwargs):
+    def __init__(self, nb_direction=3, nb_memory=3, nb_sigmoid=6, a=0.667, b_s=4.372, spiking=False, *args, **kwargs):
         self.nb_direction = nb_direction
         self.nb_memory = nb_memory
         self.nb_sigmoid = nb_sigmoid
@@ -324,7 +324,7 @@ class MinimalDeviceSteering():
         self.r_steering = np.zeros(2, dtype=np.float32)
         self.a = a
         self.b_s = b_s
-
+        self.spiking = spiking
         self.w_mem2sigmoid = 4 * np.array([
                             [0,0,0,1,1,0],
                             [1,0,0,0,0,1],
@@ -343,21 +343,6 @@ class MinimalDeviceSteering():
                         [1,0],
                         [0,1]
         ])
-
-        # Downscale weights and add uniform noise (emitter-receiver imperfect communication)
-        self.w_dir2sigmoid *= communication_downscaling_factor / 100
-        noise_range = np.max(self.w_dir2sigmoid) * communication_noise_factor / 100
-        noise = np.random.uniform(-noise_range, noise_range, size=self.w_dir2sigmoid.shape)
-        self.w_dir2sigmoid += noise
-
-        self.w_mem2sigmoid = self.w_mem2sigmoid * communication_downscaling_factor / 100.0
-        noise_range = np.max(self.w_mem2sigmoid) * communication_noise_factor / 100
-        noise = np.random.uniform(-noise_range, noise_range, size=self.w_mem2sigmoid.shape)
-        self.w_mem2sigmoid += noise
-
-        # Decrease weights by oom (proportional to distance between nanowires)
-        self.w_dir2sigmoid /= 10**transmittance_per_distance_oom
-        self.w_mem2sigmoid /= 10**transmittance_per_distance_oom
 
     def reset(self):
         self.w_mem2sigmoid = 4 * np.array([
@@ -383,6 +368,10 @@ class MinimalDeviceSteering():
         self.r_steering_diff = np.zeros(1, dtype=np.float32)
 
     def __call__(self, direction=None, memory=None):
+        if self.spiking:
+            direction = np.sum(direction,axis=1)/direction.shape[1]
+            memory = np.sum(memory,axis=1)/memory.shape[1]
+
         memory_input_to_sigmoid_neuron = np.dot(memory, self.w_mem2sigmoid)
         direction_input_to_sigmoid_neuron = np.dot(direction.T, self.w_dir2sigmoid)
         sigmoid_neuron = memory_input_to_sigmoid_neuron + direction_input_to_sigmoid_neuron

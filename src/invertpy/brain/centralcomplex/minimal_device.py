@@ -20,7 +20,7 @@ from invertpy.brain.synapses import chessboard_synapses
 
 class MinimalDeviceCX(CentralComplexBase):
 
-    def __init__(self, POL_method="single_0", omm_photoreceptor_angle=2, field_of_view=56, degrees=True, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True, use_nanowires=False, sigmoid_bool=True, use_dye=False, communication_downscaling_factor=100, communication_noise_factor=0, transmittance_per_distance_oom=0, nb_sigmoid=6, nb_steer=2, a=0.667, b_s=4.372, *args, **kwargs):
+    def __init__(self, POL_method="single_0", omm_photoreceptor_angle=2, field_of_view=56, degrees=True, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, spiking=False, update=True, use_nanowires=False, sigmoid_bool=True, nanowire_sigmoid=True, nanowire_sigmoid_dev=0, use_dye=False, communication_noise_factor=0, total_downscaling_factor=0, nb_sigmoid=6, nb_steer=2, a=0.667, b_s=-3, *args, **kwargs):
         """
         The Central Complex model of [1]_ as a component of the locust brain.
 
@@ -44,16 +44,16 @@ class MinimalDeviceCX(CentralComplexBase):
         super().__init__(*args, **kwargs)
         if use_nanowires:
             # To be implemented once nanowire response to polarized light is known
-            self["compass"] = MinimalDevicePolarisationSensor(POL_method, nb_lenses=nb_direction, omm_photoreceptor_angle=omm_photoreceptor_angle, field_of_view=field_of_view, degrees=degrees, *args, **kwargs)
+            self["compass"] = MinimalDevicePolarisationSensor(POL_method, nb_lenses=nb_direction, omm_photoreceptor_angle=omm_photoreceptor_angle, field_of_view=field_of_view, degrees=degrees, spiking=spiking,*args, **kwargs)
         else:
-            self["compass"] = MinimalDevicePolarisationSensor(POL_method, nb_lenses=nb_direction, omm_photoreceptor_angle=omm_photoreceptor_angle, field_of_view=field_of_view, degrees=degrees, *args, **kwargs)
+            self["compass"] = MinimalDevicePolarisationSensor(POL_method, nb_lenses=nb_direction, omm_photoreceptor_angle=omm_photoreceptor_angle, field_of_view=field_of_view, degrees=degrees, spiking=spiking,*args, **kwargs)
 
         if use_dye:
-            self["memory"] = MinimalDevicePathIntegrationDyeLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool, communication_downscaling_factor=communication_downscaling_factor, communication_noise_factor=communication_noise_factor, transmittance_per_distance_oom=transmittance_per_distance_oom)
+            self["memory"] = MinimalDevicePathIntegrationDyeLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool, nanowire_sigmoid=nanowire_sigmoid, nanowire_sigmoid_dev=nanowire_sigmoid_dev, communication_noise_factor=communication_noise_factor, total_downscaling_factor=total_downscaling_factor)
         else:
-            self["memory"] = MinimalDevicePathIntegratorLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool)
+            self["memory"] = MinimalDevicePathIntegratorLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool, spiking=spiking)
 
-        self["steering"] = MinimalDeviceSteering(nb_direction=nb_direction, nb_memory=nb_memory, nb_sigmoid=nb_sigmoid, nb_steer=nb_steer, a=a, b_s=b_s, communication_downscaling_factor=communication_downscaling_factor, communication_noise_factor=communication_noise_factor, transmittance_per_distance_oom=transmittance_per_distance_oom)
+        self["steering"] = MinimalDeviceSteering(nb_direction=nb_direction, nb_memory=nb_memory, nb_sigmoid=nb_sigmoid, nb_steer=nb_steer, a=a, b_s=b_s, spiking=spiking, communication_noise_factor=communication_noise_factor, total_downscaling_factor=total_downscaling_factor)
 
         self.nb_direction = nb_direction
         self.nb_memory = nb_memory
