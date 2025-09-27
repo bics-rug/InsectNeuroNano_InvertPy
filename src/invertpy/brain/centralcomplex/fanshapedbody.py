@@ -16,6 +16,7 @@ from invertpy.sense.adex_memory import MemoryAdExNeuron
 
 from .centralcomplex import CentralComplexLayer
 from ._helpers import decode_vector
+from ...sense.LIF_sigmoid_node import LIFNeuron
 
 
 class FanShapedBodyLayer(CentralComplexLayer):
@@ -182,7 +183,7 @@ class FanShapedBodyLayer(CentralComplexLayer):
         return self._nb_output
 
 class MinimalDevicePathIntegratorLayer():
-    def __init__(self, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True, sigmoid_bool=True, spiking=False):
+    def __init__(self, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, update=True, sigmoid_bool=True, spiking=False, spiking_memory_type="AdEx"):
 
         self.w_dir2mem_p = None
         self.nb_direction = nb_direction
@@ -195,11 +196,20 @@ class MinimalDevicePathIntegratorLayer():
         self.update = update
         self.sigmoid_activation = sigmoid_bool
         self.spiking = spiking
+        self.spiking_memory_type = spiking_memory_type
 
-        #AdEx neuron replaces leaky memory
+        #AdEx neuron memory
         self.adex_neuron_1 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
         self.adex_neuron_2 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
         self.adex_neuron_3 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
+
+        #LIF neuron & synaptic memory
+        self.LIF_neuron_1 = LIFNeuron()
+        self.LIF_neuron_2 = LIFNeuron()
+        self.LIF_neuron_3 = LIFNeuron()
+        self.adaptive_w_dir2mem1 = self.w_dir2mem[0][0]
+        self.adaptive_w_dir2mem2 = self.w_dir2mem[0][0]
+        self.adaptive_w_dir2mem3 = self.w_dir2mem[0][0]
 
     def reset(self):
         self.w_dir2mem = diagonal_synapses(self.nb_direction, self.nb_memory, fill_value=0.0115, dtype=np.float32)
@@ -207,6 +217,12 @@ class MinimalDevicePathIntegratorLayer():
         self.adex_neuron_1.reset()
         self.adex_neuron_2.reset()
         self.adex_neuron_3.reset()
+        self.LIF_neuron_1 = LIFNeuron()
+        self.LIF_neuron_2 = LIFNeuron()
+        self.LIF_neuron_3 = LIFNeuron()
+        self.adaptive_w_dir2mem1 = self.w_dir2mem[0][0]
+        self.adaptive_w_dir2mem2 = self.w_dir2mem[0][0]
+        self.adaptive_w_dir2mem3 = self.w_dir2mem[0][0]
 
     def __call__(self, direction=None):
         if self.spiking:
@@ -215,7 +231,10 @@ class MinimalDevicePathIntegratorLayer():
             current_direction_mem_input = direction.T.dot(self.w_dir2mem)
         if self.update:
             if self.spiking:
-                memory = self.spiking_mem_update(current_direction_mem_input)
+                if self.spiking_memory_type == "AdEx":
+                    memory = self.spiking_mem_update_AdEx(current_direction_mem_input)
+                elif self.spiking_memory_type == "synaptic":
+                    memory = self.spiking_mem_update_synaptic(direction)
             else:
                 memory = self.mem_update(current_direction_mem_input)
                 if self.sigmoid_activation:
@@ -228,19 +247,55 @@ class MinimalDevicePathIntegratorLayer():
 
     def mem_update(self, mem_input):
         self.r_memory[:] = self.r_memory + (mem_input - self.r_memory) / self.tau
-        print('kk',self.r_memory)
         return self.r_memory
 
-    def spiking_mem_update(self, mem_input):
+    def spiking_mem_update_AdEx(self, mem_input):
         """
         mem_input: 1000-length spike train from D node, scaled by 0.0115
         Returns: total spike count of the AdEx neuron over 1000 timesteps
         """
-        spike_count_1 = self.adex_neuron_1.simulate_spike_train(mem_input[0])
-        spike_count_2 = self.adex_neuron_2.simulate_spike_train(mem_input[1])
-        spike_count_3 = self.adex_neuron_3.simulate_spike_train(mem_input[2])
-        spike_counts = np.array([spike_count_1,spike_count_2,spike_count_3])
-        return spike_counts
+        spikes_1 = self.adex_neuron_1.simulate_spike_train(mem_input[0])
+        spikes_2 = self.adex_neuron_2.simulate_spike_train(mem_input[1])
+        spikes_3 = self.adex_neuron_3.simulate_spike_train(mem_input[2])
+        spikes = np.array([spikes_1,spikes_2,spikes_3])
+        return spikes
+
+    def update_synaptic_weight(self, weight, pre_spikes, post_spikes):
+        eta = 1e-2
+        weight += eta * pre_spikes * post_spikes
+        return weight
+
+    def stdp_synaptic_update(self, weight, pre_spikes, post_spikes, A_plus=1e-8, tau_plus=15,
+                               ):
+        pre_spike_times = np.where(pre_spikes == 1)[0]
+        post_spike_times = np.where(post_spikes == 1)[0]
+
+        # Create all pairwise delta_t
+        print(post_spike_times[:20], pre_spike_times[:20])
+        delta_t = post_spike_times[:, None] - pre_spike_times[None, :]
+
+        # Potentiation for delta_t > 0
+        dwp = A_plus * np.exp(-delta_t / tau_plus) * (delta_t > 0)
+
+        # Sum all updates
+        delta_w = dwp.sum()
+        # Update weight
+        weight += delta_w
+        return weight
+
+    def spiking_mem_update_synaptic(self, mem_input):
+        """
+        mem_input: 1000-length spike train from D node, scaled by 0.0115
+        Returns: total spike count of the AdEx neuron over 1000 timesteps
+        """
+        post_spikes_1 = self.LIF_neuron_1.steps(mem_input[0] * self.adaptive_w_dir2mem1)
+        post_spikes_2 = self.LIF_neuron_2.steps(mem_input[1] * self.adaptive_w_dir2mem2)
+        post_spikes_3 = self.LIF_neuron_3.steps(mem_input[2] * self.adaptive_w_dir2mem3)
+        self.adaptive_w_dir2mem1 = self.stdp_synaptic_update(self.adaptive_w_dir2mem1, mem_input[0], post_spikes_1)
+        self.adaptive_w_dir2mem2 = self.stdp_synaptic_update(self.adaptive_w_dir2mem2, mem_input[1], post_spikes_2)
+        self.adaptive_w_dir2mem3 = self.stdp_synaptic_update(self.adaptive_w_dir2mem3, mem_input[2], post_spikes_3)
+        spikes = np.array([post_spikes_1,post_spikes_2,post_spikes_3])
+        return spikes
 
     def reset_integrator(self):
         self.r_memory[:] = 0
@@ -286,6 +341,610 @@ class MinimalDevicePathIntegratorLayerNanowires():
     def reset_integrator(self):
         self.r_memory[:] = 0
 
+class ModuloCodePathIntegratorLayer(FanShapedBodyLayer):
+    def __init__(self, nb_delta7=8, nb_fbn=16, nb_tn1=2, nb_tn2=2, gain=0.025, *args, **kwargs):
+        """
+        The path integration model of [1]_ as a component of the locust brain that lives in the Fan-shaped Body.
+
+
+        Parameters
+        ----------
+        nb_delta7: int, optional
+            the number of Delta7 neurons (fruit fly name of TB1 neuron). These are connected in the Fan-shaped Body
+            through the columnar neurons (PFN).
+        nb_tn1: int, optional
+            the number of TN1 neurons (locust literature).
+        nb_tn2: int, optional
+            the number of TN2 neurons (locust literature).
+        nb_fbn: int, optional
+            the number of Fan-shaped Body neurons (CPU4 in locust literature).
+        gain: float, optional
+            the gain if used as charging speed for the memory.
+        pontine: bool, optional
+            whether to include the Pontine neurons in the circuit or not. Default is True.
+        holonomic : bool, optional
+            whether to use the holonomic version of the circuit or not. Default is True.
+
+        Notes
+        -----
+        .. [1] Stone, T. et al. An Anatomically Constrained Model for Path Integration in the Bee Brain.
+           Curr Biol 27, 3069-3085.e11 (2017).
+        """
+
+        nb_delta7 = kwargs.pop('nb_tb1', nb_delta7)
+        nb_fbn = kwargs.pop('nb_cpu4', nb_fbn)
+        kwargs.setdefault('nb_pfn', nb_delta7)
+        kwargs.setdefault('nb_tangential', nb_tn1 + nb_tn2)
+        super().__init__(*args, nb_fbn=nb_fbn, **kwargs)
+
+        self._nb_tn1 = nb_tn1
+        self._nb_tn2 = nb_tn2
+
+        self._gain = gain
+
+        self.ring_sizes = [3, 4, 5, 11, 13]
+        self.memory_rings = [[CW_Ring(n) for n in self.ring_sizes] for _ in range(nb_fbn)]
+        self.reversed_memory_rings = [[CCW_Ring(n) for n in self.ring_sizes] for _ in range(nb_fbn)]
+        self.w_dm = [np.ones((1, n)) for n in self.ring_sizes]
+
+        self.m_cpu4 = np.zeros(self.nb_fbn, dtype=self.dtype)
+        self.__mem = .5 * np.ones(self.nb_fbn, dtype=self.dtype)  # cpu4 memory
+
+    def reset(self):
+        super().reset()
+
+        self.w_p2f = diagonal_synapses(self.nb_tb1, self.nb_cpu4, fill_value=-1, tile=True, dtype=self.dtype)
+        self.w_tn12cpu4 = chessboard_synapses(self.nb_tn1, self.nb_cpu4, nb_rows=2, nb_cols=2, fill_value=1,
+                                              dtype=self.dtype)
+        self.w_tn22cpu4 = chessboard_synapses(self.nb_tn2, self.nb_cpu4, nb_rows=2, nb_cols=2, fill_value=1,
+                                              dtype=self.dtype)
+
+        self.__mem[:] = .5
+
+    def _fprop(self, delta7=None, tb1=None, tn1=None, tn2=None):
+        if delta7 is not None:
+            tb1 = delta7
+        if tb1 is None:
+            tb1 = self.r_tb1
+        if tn1 is None:
+            tn1 = self.r_tn1
+        if tn2 is None:
+            tn2 = self.r_tn2
+
+        # Idealised setup, where we can negate the TB1 sinusoid for memorising backwards motion
+        mem_tn1 = (.5 - tn1).dot(self.w_tn12cpu4)
+        mem_tb1 = (tb1 - 1).dot(self.w_p2f)
+
+        # Both CPU4 waves must have same average
+        # If we don't normalise get drift and weird steering
+        mem_tn2 = 0.25 * tn2.dot(self.w_tn22cpu4)
+
+        #mem = mem_tn1 * mem_tb1 - mem_tn2
+        mem = mem_tb1
+        self.m_cpu4 = self.f_fbn(mem * 500)
+
+        if self.update:
+            cpu4_mem = self.mem_update(mem)
+        else:
+            cpu4_mem = mem
+
+        # this creates a problem with vector memories
+        # cpu4_mem = np.clip(cpu4_mem, 0., 1.)
+
+        self.r_tb1 = tb1
+        self.r_tn1 = tn1
+        self.r_tn2 = tn2
+        self.r_cpu4 = a_cpu4 = self.f_cpu4(cpu4_mem)
+
+        return a_cpu4
+
+    def mem_update(self, mem):
+        #self.__mem[:] = self.__mem + self.gain * mem
+        n_directions = len(mem)
+        for direction_idx in range(n_directions):
+            for attractor_idx, W in enumerate(self.w_dm):
+                for i in range(round(mem[direction_idx] / 0.1)):
+                    # update ring
+                    self.memory_rings[direction_idx][attractor_idx].step(W[0])
+                    self.reversed_memory_rings[direction_idx][attractor_idx].state = self.memory_rings[direction_idx][attractor_idx].state.copy()
+
+        def decode_direction(reversed_memory_rings):
+            count = 0
+            max_indices = [1] * 5  # Ensure loop starts
+
+            while max_indices != [0] * 5:
+                max_indices = []
+                for attr in reversed_memory_rings:
+                    attr.step(np.ones(attr.n))
+                    max_idx = np.argmax(attr.state)
+                    max_indices.append(max_idx)
+                    count += 1
+
+            return count
+
+        # Run decoding in parallel for all directions
+        decoded = Parallel(n_jobs=-1)(
+            delayed(decode_direction)(self.reversed_memory_rings[direction_idx])
+            for direction_idx in range(n_directions)
+        )
+
+        self.__mem = np.array(decoded) * 0.003 * self.gain
+        return self.__mem
+
+    def reset_integrator(self):
+        self.__mem[:] = .5
+
+    def decode_vector(self):
+        """
+        Transforms the CPU4 vector memory to a vector in the Cartesian coordinate system.
+
+        Returns
+        -------
+        complex
+        """
+        return decode_vector(self.__mem, self._gain)
+
+    @property
+    def w_tn12cpu4(self):
+        return self._w_t2f[:self.nb_tn1]
+
+    @w_tn12cpu4.setter
+    def w_tn12cpu4(self, v):
+        self._w_t2f[:self.nb_tn1] = v
+
+    @property
+    def w_tn22cpu4(self):
+        return self._w_t2f[self.nb_tn1:self.nb_tn1+self.nb_tn2]
+
+    @w_tn22cpu4.setter
+    def w_tn22cpu4(self, v):
+        self._w_t2f[self.nb_tn1:self.nb_tn1+self.nb_tn2] = v
+
+    @property
+    def f_cpu4(self):
+        return self.f_fbn
+
+    @property
+    def r_tn1(self):
+        """
+        The latest responses of the TN1 (part of the tangential) neurons.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_tangential[:self.nb_tn1]
+
+    @r_tn1.setter
+    def r_tn1(self, v):
+        self.r_tangential[:self.nb_tn1] = v
+
+    @property
+    def r_tn2(self):
+        """
+        The latest responses of the TN2 (part of the tangential) neurons.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_tangential[self.nb_tn1:self.nb_tn1+self.nb_tn2]
+
+    @r_tn2.setter
+    def r_tn2(self, v):
+        self.r_tangential[self.nb_tn1:self.nb_tn1+self.nb_tn2] = v
+
+    @property
+    def r_tb1(self):
+        """
+        The latest responses of the TB1 neurons (same as Delta7).
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_pfn
+
+    @r_tb1.setter
+    def r_tb1(self, v):
+        self._pfn[:] = v
+
+    @property
+    def r_delta7(self):
+        """
+        The latest responses of the Delta7 neurons (same as TB1).
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_pfn
+
+    @r_delta7.setter
+    def r_delta7(self, v):
+        self._pfn[:] = v
+
+    @property
+    def r_cpu4(self):
+        """
+        The latest responses of the CPU4 neurons.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_fbn
+
+    @r_cpu4.setter
+    def r_cpu4(self, v):
+        self.r_fbn[:] = v
+
+    @property
+    def cpu4_mem(self):
+        return self.__mem
+
+    @cpu4_mem.setter
+    def cpu4_mem(self, v):
+        self.__mem[:] = v
+
+    @property
+    def nb_delta7(self):
+        """
+        The number of Delta7 neurons (same as TB1).
+
+        Returns
+        -------
+        int
+        """
+        return self.nb_pfn
+
+    @property
+    def nb_tb1(self):
+        """
+        The number of TB1 neurons (same as Delta7).
+
+        Returns
+        -------
+        int
+        """
+        return self.nb_pfn
+
+    @property
+    def nb_tn1(self):
+        """
+        The number of TN1 (part of the tangential) neurons.
+
+        Returns
+        -------
+        int
+        """
+        return self._nb_tn1
+
+    @property
+    def nb_tn2(self):
+        """
+        The number of TN2 (part of the tangential) neurons.
+
+        Returns
+        -------
+        int
+        """
+        return self._nb_tn2
+
+    @property
+    def nb_cpu4(self):
+        """
+        The number of CPU4 units.
+
+        Returns
+        -------
+        int
+        """
+        return self.nb_fbn
+
+    @property
+    def gain(self):
+        return self._gain
+
+class ClockPathIntegratorLayer(FanShapedBodyLayer):
+    def __init__(self, nb_delta7=8, nb_fbn=16, nb_tn1=2, nb_tn2=2, gain=0.025, *args, **kwargs):
+        """
+        The path integration model of [1]_ as a component of the locust brain that lives in the Fan-shaped Body.
+
+
+        Parameters
+        ----------
+        nb_delta7: int, optional
+            the number of Delta7 neurons (fruit fly name of TB1 neuron). These are connected in the Fan-shaped Body
+            through the columnar neurons (PFN).
+        nb_tn1: int, optional
+            the number of TN1 neurons (locust literature).
+        nb_tn2: int, optional
+            the number of TN2 neurons (locust literature).
+        nb_fbn: int, optional
+            the number of Fan-shaped Body neurons (CPU4 in locust literature).
+        gain: float, optional
+            the gain if used as charging speed for the memory.
+        pontine: bool, optional
+            whether to include the Pontine neurons in the circuit or not. Default is True.
+        holonomic : bool, optional
+            whether to use the holonomic version of the circuit or not. Default is True.
+
+        Notes
+        -----
+        .. [1] Stone, T. et al. An Anatomically Constrained Model for Path Integration in the Bee Brain.
+           Curr Biol 27, 3069-3085.e11 (2017).
+        """
+
+        nb_delta7 = kwargs.pop('nb_tb1', nb_delta7)
+        nb_fbn = kwargs.pop('nb_cpu4', nb_fbn)
+        kwargs.setdefault('nb_pfn', nb_delta7)
+        kwargs.setdefault('nb_tangential', nb_tn1 + nb_tn2)
+        super().__init__(*args, nb_fbn=nb_fbn, **kwargs)
+
+        self._nb_tn1 = nb_tn1
+        self._nb_tn2 = nb_tn2
+
+        self._gain = gain
+
+        self.n_attractors = 4
+        self.num_directions = 8
+        self.memory = [[CW_Ring(10) for _ in range(self.n_attractors)] for _ in range(self.num_directions)]
+        self.w_dm = np.ones((1, 10))
+
+        self.m_cpu4 = np.zeros(self.nb_fbn, dtype=self.dtype)
+        self.__mem = .5 * np.ones(self.nb_fbn, dtype=self.dtype)  # cpu4 memory
+
+    def reset(self):
+        super().reset()
+
+        self.w_p2f = diagonal_synapses(self.nb_tb1, self.nb_cpu4, fill_value=-1, tile=True, dtype=self.dtype)
+        self.w_tn12cpu4 = chessboard_synapses(self.nb_tn1, self.nb_cpu4, nb_rows=2, nb_cols=2, fill_value=1,
+                                              dtype=self.dtype)
+        self.w_tn22cpu4 = chessboard_synapses(self.nb_tn2, self.nb_cpu4, nb_rows=2, nb_cols=2, fill_value=1,
+                                              dtype=self.dtype)
+
+        self.__mem[:] = .5
+
+    def _fprop(self, delta7=None, tb1=None, tn1=None, tn2=None):
+        if delta7 is not None:
+            tb1 = delta7
+        if tb1 is None:
+            tb1 = self.r_tb1
+        if tn1 is None:
+            tn1 = self.r_tn1
+        if tn2 is None:
+            tn2 = self.r_tn2
+
+        # Idealised setup, where we can negate the TB1 sinusoid for memorising backwards motion
+        mem_tn1 = (.5 - tn1).dot(self.w_tn12cpu4)
+        mem_tb1 = (tb1 - 1).dot(self.w_p2f)
+
+        # Both CPU4 waves must have same average
+        # If we don't normalise get drift and weird steering
+        mem_tn2 = 0.25 * tn2.dot(self.w_tn22cpu4)
+
+        #mem = mem_tn1 * mem_tb1 - mem_tn2
+        mem = mem_tb1
+        self.m_cpu4 = self.f_fbn(mem * 500)
+
+        if self.update:
+            cpu4_mem = self.mem_update(mem)
+        else:
+            cpu4_mem = mem
+
+        # this creates a problem with vector memories
+        # cpu4_mem = np.clip(cpu4_mem, 0., 1.)
+
+        self.r_tb1 = tb1
+        self.r_tn1 = tn1
+        self.r_tn2 = tn2
+        self.r_cpu4 = a_cpu4 = self.f_cpu4(cpu4_mem)
+
+        return a_cpu4
+
+    def mem_update(self, mem):
+        #self.__mem[:] = self.__mem + self.gain * mem
+        n_directions = len(mem)
+        for direction_idx in range(0, n_directions):
+            for i in range(round(mem / 0.1)):
+                input_vector = mem[direction_idx].reshape(1, 1) @ self.w_dm
+                self.memory[direction_idx][0].step(input_vector[0])
+                if (self.memory[direction_idx][0].state == np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0])).all():
+                    self.memory[direction_idx][1].step(input_vector[0])
+                    if (self.memory[direction_idx][1].state == np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0])).all():
+                        self.memory[direction_idx][2].step(input_vector[0])
+                        if (self.memory[direction_idx][2].state == np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0])).all():
+                            self.memory[direction_idx][3].step(input_vector[0])
+
+        # Decoding
+        decoding_weights_1 = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        decoding_weights_10 = decoding_weights_1 * 10
+        decoding_weights_100 = decoding_weights_10 * 100
+
+        decoded = []
+        for direction_idx in range(n_directions):
+            decoded_dir = np.dot(self.memory[direction_idx][3].state, decoding_weights_100) + np.dot(
+                self.memory[direction_idx][2].state, decoding_weights_10) + np.dot(self.memory[direction_idx][1].state,
+                                                                              decoding_weights_1)
+            decoded.append(decoded_dir)
+        self.__mem = np.array(decoded) * 0.003 * self.gain
+        return self.__mem
+
+    def reset_integrator(self):
+        self.__mem[:] = .5
+
+    def decode_vector(self):
+        """
+        Transforms the CPU4 vector memory to a vector in the Cartesian coordinate system.
+
+        Returns
+        -------
+        complex
+        """
+        return decode_vector(self.__mem, self._gain)
+
+    @property
+    def w_tn12cpu4(self):
+        return self._w_t2f[:self.nb_tn1]
+
+    @w_tn12cpu4.setter
+    def w_tn12cpu4(self, v):
+        self._w_t2f[:self.nb_tn1] = v
+
+    @property
+    def w_tn22cpu4(self):
+        return self._w_t2f[self.nb_tn1:self.nb_tn1+self.nb_tn2]
+
+    @w_tn22cpu4.setter
+    def w_tn22cpu4(self, v):
+        self._w_t2f[self.nb_tn1:self.nb_tn1+self.nb_tn2] = v
+
+    @property
+    def f_cpu4(self):
+        return self.f_fbn
+
+    @property
+    def r_tn1(self):
+        """
+        The latest responses of the TN1 (part of the tangential) neurons.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_tangential[:self.nb_tn1]
+
+    @r_tn1.setter
+    def r_tn1(self, v):
+        self.r_tangential[:self.nb_tn1] = v
+
+    @property
+    def r_tn2(self):
+        """
+        The latest responses of the TN2 (part of the tangential) neurons.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_tangential[self.nb_tn1:self.nb_tn1+self.nb_tn2]
+
+    @r_tn2.setter
+    def r_tn2(self, v):
+        self.r_tangential[self.nb_tn1:self.nb_tn1+self.nb_tn2] = v
+
+    @property
+    def r_tb1(self):
+        """
+        The latest responses of the TB1 neurons (same as Delta7).
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_pfn
+
+    @r_tb1.setter
+    def r_tb1(self, v):
+        self._pfn[:] = v
+
+    @property
+    def r_delta7(self):
+        """
+        The latest responses of the Delta7 neurons (same as TB1).
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_pfn
+
+    @r_delta7.setter
+    def r_delta7(self, v):
+        self._pfn[:] = v
+
+    @property
+    def r_cpu4(self):
+        """
+        The latest responses of the CPU4 neurons.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_fbn
+
+    @r_cpu4.setter
+    def r_cpu4(self, v):
+        self.r_fbn[:] = v
+
+    @property
+    def cpu4_mem(self):
+        return self.__mem
+
+    @cpu4_mem.setter
+    def cpu4_mem(self, v):
+        self.__mem[:] = v
+
+    @property
+    def nb_delta7(self):
+        """
+        The number of Delta7 neurons (same as TB1).
+
+        Returns
+        -------
+        int
+        """
+        return self.nb_pfn
+
+    @property
+    def nb_tb1(self):
+        """
+        The number of TB1 neurons (same as Delta7).
+
+        Returns
+        -------
+        int
+        """
+        return self.nb_pfn
+
+    @property
+    def nb_tn1(self):
+        """
+        The number of TN1 (part of the tangential) neurons.
+
+        Returns
+        -------
+        int
+        """
+        return self._nb_tn1
+
+    @property
+    def nb_tn2(self):
+        """
+        The number of TN2 (part of the tangential) neurons.
+
+        Returns
+        -------
+        int
+        """
+        return self._nb_tn2
+
+    @property
+    def nb_cpu4(self):
+        """
+        The number of CPU4 units.
+
+        Returns
+        -------
+        int
+        """
+        return self.nb_fbn
+
+    @property
+    def gain(self):
+        return self._gain
 
 class PathIntegratorLayer(FanShapedBodyLayer):
     def __init__(self, nb_delta7=8, nb_fbn=16, nb_tn1=2, nb_tn2=2, gain=0.025, *args, **kwargs):

@@ -20,7 +20,7 @@ from invertpy.brain.synapses import chessboard_synapses
 
 class MinimalDeviceCX(CentralComplexBase):
 
-    def __init__(self, POL_method="single_0", omm_photoreceptor_angle=2, field_of_view=56, degrees=True, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, spiking=False, update=True, use_nanowires=False, sigmoid_bool=True, nanowire_sigmoid=True, nanowire_sigmoid_dev=0, use_dye=False, communication_noise_factor=0, total_downscaling_factor=0, nb_sigmoid=6, nb_steer=2, a=0.667, b_s=-3, *args, **kwargs):
+    def __init__(self, POL_method="single_0", omm_photoreceptor_angle=2, field_of_view=56, degrees=True, nb_direction=3, nb_memory=3, tau=135518, b_c=1.164, spiking=False, spiking_memory_type="synaptic", update=True, use_nanowires=False, sigmoid_bool=True, nanowire_sigmoid=True, nanowire_sigmoid_dev=0, use_dye=False, communication_noise_factor=0, total_downscaling_factor=0, nb_sigmoid=6, nb_steer=2, a=0.667, b_s=-2, *args, **kwargs):
         """
         The Central Complex model of [1]_ as a component of the locust brain.
 
@@ -51,7 +51,7 @@ class MinimalDeviceCX(CentralComplexBase):
         if use_dye:
             self["memory"] = MinimalDevicePathIntegrationDyeLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool, nanowire_sigmoid=nanowire_sigmoid, nanowire_sigmoid_dev=nanowire_sigmoid_dev, communication_noise_factor=communication_noise_factor, total_downscaling_factor=total_downscaling_factor)
         else:
-            self["memory"] = MinimalDevicePathIntegratorLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool, spiking=spiking)
+            self["memory"] = MinimalDevicePathIntegratorLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool, spiking=spiking, spiking_memory_type=spiking_memory_type)
 
         self["steering"] = MinimalDeviceSteering(nb_direction=nb_direction, nb_memory=nb_memory, nb_sigmoid=nb_sigmoid, nb_steer=nb_steer, a=a, b_s=b_s, spiking=spiking, communication_noise_factor=communication_noise_factor, total_downscaling_factor=total_downscaling_factor)
 

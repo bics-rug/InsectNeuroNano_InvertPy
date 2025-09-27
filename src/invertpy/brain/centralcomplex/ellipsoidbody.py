@@ -316,7 +316,7 @@ class SimpleCompass(EllipsoidBodyLayer):
         return self._nb_tl2
 
 class MinimalDeviceSteering():
-    def __init__(self, nb_direction=3, nb_memory=3, nb_sigmoid=6, a=0.667, b_s=4.372, spiking=False, *args, **kwargs):
+    def __init__(self, nb_direction=3, nb_memory=3, nb_sigmoid=6, a=0.667, b_s=-2, spiking=False, *args, **kwargs):
         self.nb_direction = nb_direction
         self.nb_memory = nb_memory
         self.nb_sigmoid = nb_sigmoid
