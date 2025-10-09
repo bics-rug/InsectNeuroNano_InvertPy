@@ -344,6 +344,8 @@ class MinimalDeviceSteering():
                         [0,1]
         ])
 
+        self.b_s = 0
+
     def reset(self):
         self.w_mem2sigmoid = 4 * np.array([
                             [0,0,0,1,1,0],
@@ -368,13 +370,17 @@ class MinimalDeviceSteering():
         self.r_steering_diff = np.zeros(1, dtype=np.float32)
 
     def __call__(self, direction=None, memory=None):
-        if self.spiking:
-            direction = np.sum(direction,axis=1)/direction.shape[1]
-            memory = np.sum(memory,axis=1)/memory.shape[1]
 
-        memory_input_to_sigmoid_neuron = np.dot(memory, self.w_mem2sigmoid)
-        direction_input_to_sigmoid_neuron = np.dot(direction.T, self.w_dir2sigmoid)
-        sigmoid_neuron = memory_input_to_sigmoid_neuron + direction_input_to_sigmoid_neuron
+        direction_input_to_sigmoid_neuron = np.dot(self.w_dir2sigmoid.T, direction)
+        memory_input_to_sigmoid_neuron = np.dot(self.w_mem2sigmoid.T, memory)
+
+        total_input = memory_input_to_sigmoid_neuron + direction_input_to_sigmoid_neuron
+        sigmoid_output_spikes = []
+        for i in range(6):
+            spiking_sigmoid_neuron = LIFNeuron()
+            output_spikes = spiking_sigmoid_neuron.steps(total_input[i])
+            sigmoid_output_spikes.append(output_spikes)
+        sigmoid_output_spikes = np.array(sigmoid_output_spikes)
 
         def step_function(x):
             if x < 0:
@@ -382,10 +388,10 @@ class MinimalDeviceSteering():
             else:
                 return 1
 
-        self.r_sigmoid_neuron = sigmoid_neuron
-        sigmoid_neuron_post_activation = 1 / (1 + np.exp(-self.a * sigmoid_neuron + self.b_s))
+        steering_spike_trains = np.dot(self.w_sigmoid2steering.T, sigmoid_output_spikes)
+        # Transform spike trains into spike rates
+        steering = steering_spike_trains.sum(axis=1)
 
-        steering = np.dot(sigmoid_neuron_post_activation, self.w_sigmoid2steering)
         self.r_steering = steering
         self.r_steering_diff = steering[0] - steering[1]
         return steering

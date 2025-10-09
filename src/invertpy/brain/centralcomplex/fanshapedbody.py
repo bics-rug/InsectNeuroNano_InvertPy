@@ -204,12 +204,23 @@ class MinimalDevicePathIntegratorLayer():
         self.adex_neuron_3 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
 
         #LIF neuron & synaptic memory
-        self.LIF_neuron_1 = LIFNeuron()
-        self.LIF_neuron_2 = LIFNeuron()
-        self.LIF_neuron_3 = LIFNeuron()
+        self.M1 = LIFNeuron()
+        self.M2 = LIFNeuron()
+        self.M3 = LIFNeuron()
         self.adaptive_w_dir2mem1 = self.w_dir2mem[0][0]
         self.adaptive_w_dir2mem2 = self.w_dir2mem[0][0]
         self.adaptive_w_dir2mem3 = self.w_dir2mem[0][0]
+
+        # Synaptic modulation
+        self.adaptive_w_ct2mem1 = self.w_dir2mem[0][0]
+        self.adaptive_w_ct2mem2 = self.w_dir2mem[0][0]
+        self.adaptive_w_ct2mem3 = self.w_dir2mem[0][0]
+        self.M1 = LIFNeuron()
+        self.M2 = LIFNeuron()
+        self.M3 = LIFNeuron()
+        self.output_spikes_M1 = np.zeros(self.nb_memory, dtype=np.float32)
+        self.output_spikes_M2 = np.zeros(self.nb_memory, dtype=np.float32)
+        self.output_spikes_M3 = np.zeros(self.nb_memory, dtype=np.float32)
 
     def reset(self):
         self.w_dir2mem = diagonal_synapses(self.nb_direction, self.nb_memory, fill_value=0.0115, dtype=np.float32)
@@ -217,12 +228,17 @@ class MinimalDevicePathIntegratorLayer():
         self.adex_neuron_1.reset()
         self.adex_neuron_2.reset()
         self.adex_neuron_3.reset()
-        self.LIF_neuron_1 = LIFNeuron()
-        self.LIF_neuron_2 = LIFNeuron()
-        self.LIF_neuron_3 = LIFNeuron()
+        self.M1 = LIFNeuron()
+        self.M2 = LIFNeuron()
+        self.M3 = LIFNeuron()
         self.adaptive_w_dir2mem1 = self.w_dir2mem[0][0]
         self.adaptive_w_dir2mem2 = self.w_dir2mem[0][0]
         self.adaptive_w_dir2mem3 = self.w_dir2mem[0][0]
+
+        # Synaptic modulation
+        self.adaptive_w_ct2mem1 = self.w_dir2mem[0][0]
+        self.adaptive_w_ct2mem2 = self.w_dir2mem[0][0]
+        self.adaptive_w_ct2mem3 = self.w_dir2mem[0][0]
 
     def __call__(self, direction=None):
         if self.spiking:
@@ -235,6 +251,10 @@ class MinimalDevicePathIntegratorLayer():
                     memory = self.spiking_mem_update_AdEx(current_direction_mem_input)
                 elif self.spiking_memory_type == "synaptic":
                     memory = self.spiking_mem_update_synaptic(direction)
+                elif self.spiking_memory_type == "synaptic_modulation":
+                    np.random.seed(0)
+                    constant_input = np.random.binomial(1, 0.5, 1000)
+                    memory = self.spiking_mem_update_synaptic_modulation(direction,constant_input)
             else:
                 memory = self.mem_update(current_direction_mem_input)
                 if self.sigmoid_activation:
@@ -283,14 +303,28 @@ class MinimalDevicePathIntegratorLayer():
         weight += delta_w
         return weight
 
+    def spiking_mem_update_synaptic_modulation(self, direction, constant_input):
+        """
+        mem_input: 1000-length spike train from D node
+        Returns: spike train of the M neurons over 1000 timesteps
+        """
+        post_spikes_1 = self.M1.steps(constant_input * self.adaptive_w_ct2mem1)
+        post_spikes_2 = self.M2.steps(constant_input * self.adaptive_w_ct2mem2)
+        post_spikes_3 = self.M3.steps(constant_input * self.adaptive_w_ct2mem3)
+        self.adaptive_w_ct2mem1 = self.stdp_synaptic_update(self.adaptive_w_ct2mem1, direction[0], post_spikes_1)
+        self.adaptive_w_ct2mem2 = self.stdp_synaptic_update(self.adaptive_w_ct2mem2, direction[1], post_spikes_2)
+        self.adaptive_w_ct2mem3 = self.stdp_synaptic_update(self.adaptive_w_ct2mem3, direction[2], post_spikes_3)
+        spikes = np.array([post_spikes_1,post_spikes_2,post_spikes_3])
+        return spikes
+
     def spiking_mem_update_synaptic(self, mem_input):
         """
-        mem_input: 1000-length spike train from D node, scaled by 0.0115
-        Returns: total spike count of the AdEx neuron over 1000 timesteps
+        mem_input: 1000-length spike train from D node
+        Returns: spike train of the M neurons over 1000 timesteps
         """
-        post_spikes_1 = self.LIF_neuron_1.steps(mem_input[0] * self.adaptive_w_dir2mem1)
-        post_spikes_2 = self.LIF_neuron_2.steps(mem_input[1] * self.adaptive_w_dir2mem2)
-        post_spikes_3 = self.LIF_neuron_3.steps(mem_input[2] * self.adaptive_w_dir2mem3)
+        post_spikes_1 = self.M1.steps(mem_input[0] * self.adaptive_w_dir2mem1)
+        post_spikes_2 = self.M2.steps(mem_input[1] * self.adaptive_w_dir2mem2)
+        post_spikes_3 = self.M3.steps(mem_input[2] * self.adaptive_w_dir2mem3)
         self.adaptive_w_dir2mem1 = self.stdp_synaptic_update(self.adaptive_w_dir2mem1, mem_input[0], post_spikes_1)
         self.adaptive_w_dir2mem2 = self.stdp_synaptic_update(self.adaptive_w_dir2mem2, mem_input[1], post_spikes_2)
         self.adaptive_w_dir2mem3 = self.stdp_synaptic_update(self.adaptive_w_dir2mem3, mem_input[2], post_spikes_3)
