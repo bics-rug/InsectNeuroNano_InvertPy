@@ -131,6 +131,7 @@ class MinimalDevicePolarisationSensor(PolarisationSensor):
             POL_responses_3 = POL_responses
         self.r_POL = POL_responses_3
 
+        # make the compass responses more distinct between each other
         self.r_POL = (self.r_POL ** 4) * 8
 
         if self.spiking:
