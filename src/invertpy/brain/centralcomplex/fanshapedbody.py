@@ -16,7 +16,7 @@ from invertpy.sense.adex_memory import MemoryAdExNeuron
 
 from .centralcomplex import CentralComplexLayer
 from ._helpers import decode_vector
-from ...sense.LIF_sigmoid_node import LIFNeuron
+from ...sense.LIF import LIFNeuron
 
 
 class FanShapedBodyLayer(CentralComplexLayer):
@@ -198,47 +198,59 @@ class MinimalDevicePathIntegratorLayer():
         self.spiking = spiking
         self.spiking_memory_type = spiking_memory_type
 
-        #AdEx neuron memory
-        self.adex_neuron_1 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
-        self.adex_neuron_2 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
-        self.adex_neuron_3 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
-
-        #LIF neuron & synaptic memory
-        self.M1 = LIFNeuron()
-        self.M2 = LIFNeuron()
-        self.M3 = LIFNeuron()
-        self.adaptive_w_dir2mem1 = self.w_dir2mem[0][0]
-        self.adaptive_w_dir2mem2 = self.w_dir2mem[0][0]
-        self.adaptive_w_dir2mem3 = self.w_dir2mem[0][0]
-
-        # Synaptic modulation
-        self.adaptive_w_ct2mem1 = self.w_dir2mem[0][0]
-        self.adaptive_w_ct2mem2 = self.w_dir2mem[0][0]
-        self.adaptive_w_ct2mem3 = self.w_dir2mem[0][0]
-        self.M1 = LIFNeuron()
-        self.M2 = LIFNeuron()
-        self.M3 = LIFNeuron()
-        self.output_spikes_M1 = np.zeros(self.nb_memory, dtype=np.float32)
-        self.output_spikes_M2 = np.zeros(self.nb_memory, dtype=np.float32)
-        self.output_spikes_M3 = np.zeros(self.nb_memory, dtype=np.float32)
+        if self.spiking_memory_type == "AdEx":
+            #AdEx neuron memory
+            self.adex_neuron_1 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
+            self.adex_neuron_2 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
+            self.adex_neuron_3 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
+        elif self.spiking_memory_type == "synaptic":
+            #LIF neuron & synaptic memory
+            self.M1 = LIFNeuron()
+            self.M2 = LIFNeuron()
+            self.M3 = LIFNeuron()
+            self.adaptive_w_dir2mem1 = self.w_dir2mem[0][0]
+            self.adaptive_w_dir2mem2 = self.w_dir2mem[0][0]
+            self.adaptive_w_dir2mem3 = self.w_dir2mem[0][0]
+        elif self.spiking_memory_type == "synaptic_modulation":
+            # Synaptic modulation
+            self.adaptive_w_ct2mem1 = self.w_dir2mem[0][0]
+            self.adaptive_w_ct2mem2 = self.w_dir2mem[0][0]
+            self.adaptive_w_ct2mem3 = self.w_dir2mem[0][0]
+            self.M1 = LIFNeuron()
+            self.M2 = LIFNeuron()
+            self.M3 = LIFNeuron()
+            self.output_spikes_M1 = np.zeros(self.nb_memory, dtype=np.float32)
+            self.output_spikes_M2 = np.zeros(self.nb_memory, dtype=np.float32)
+            self.output_spikes_M3 = np.zeros(self.nb_memory, dtype=np.float32)
 
     def reset(self):
         self.w_dir2mem = diagonal_synapses(self.nb_direction, self.nb_memory, fill_value=0.0115, dtype=np.float32)
         self.r_memory[:] = 0
-        self.adex_neuron_1.reset()
-        self.adex_neuron_2.reset()
-        self.adex_neuron_3.reset()
-        self.M1 = LIFNeuron()
-        self.M2 = LIFNeuron()
-        self.M3 = LIFNeuron()
-        self.adaptive_w_dir2mem1 = self.w_dir2mem[0][0]
-        self.adaptive_w_dir2mem2 = self.w_dir2mem[0][0]
-        self.adaptive_w_dir2mem3 = self.w_dir2mem[0][0]
 
-        # Synaptic modulation
-        self.adaptive_w_ct2mem1 = self.w_dir2mem[0][0]
-        self.adaptive_w_ct2mem2 = self.w_dir2mem[0][0]
-        self.adaptive_w_ct2mem3 = self.w_dir2mem[0][0]
+        if self.spiking_memory_type == "AdEx":
+            #AdEx neuron memory
+            self.M1 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
+            self.M2 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
+            self.M3 = MemoryAdExNeuron(dt=1e-3, sim_time=1000e-3)
+        elif self.spiking_memory_type == "synaptic":
+            #LIF neuron & synaptic memory
+            self.M1 = LIFNeuron()
+            self.M2 = LIFNeuron()
+            self.M3 = LIFNeuron()
+            self.adaptive_w_dir2mem1 = self.w_dir2mem[0][0]
+            self.adaptive_w_dir2mem2 = self.w_dir2mem[0][0]
+            self.adaptive_w_dir2mem3 = self.w_dir2mem[0][0]
+        elif self.spiking_memory_type == "synaptic_modulation":
+            # Synaptic modulation
+            self.adaptive_w_ct2mem1 = self.w_dir2mem[0][0]
+            self.adaptive_w_ct2mem2 = self.w_dir2mem[0][0]
+            self.adaptive_w_ct2mem3 = self.w_dir2mem[0][0]
+            self.M1 = LIFNeuron()
+            self.M2 = LIFNeuron()
+            self.M3 = LIFNeuron()
+            self.output_spikes_M1 = np.zeros(self.nb_memory, dtype=np.float32)
+            self.output_spikes_M2 = np.zeros(self.nb_memory, dtype=np.float32)
+            self.output_spikes_M3 = np.zeros(self.nb_memory, dtype=np.float32)
 
     def __call__(self, direction=None):
         if self.spiking:
@@ -274,9 +286,9 @@ class MinimalDevicePathIntegratorLayer():
         mem_input: 1000-length spike train from D node, scaled by 0.0115
         Returns: total spike count of the AdEx neuron over 1000 timesteps
         """
-        spikes_1 = self.adex_neuron_1.simulate_spike_train(mem_input[0])
-        spikes_2 = self.adex_neuron_2.simulate_spike_train(mem_input[1])
-        spikes_3 = self.adex_neuron_3.simulate_spike_train(mem_input[2])
+        spikes_1 = self.M1.simulate_spike_train(mem_input[0])
+        spikes_2 = self.M2.simulate_spike_train(mem_input[1])
+        spikes_3 = self.M3.simulate_spike_train(mem_input[2])
         spikes = np.array([spikes_1,spikes_2,spikes_3])
         return spikes
 
@@ -291,7 +303,6 @@ class MinimalDevicePathIntegratorLayer():
         post_spike_times = np.where(post_spikes == 1)[0]
 
         # Create all pairwise delta_t
-        print(post_spike_times[:20], pre_spike_times[:20])
         delta_t = post_spike_times[:, None] - pre_spike_times[None, :]
 
         # Potentiation for delta_t > 0
