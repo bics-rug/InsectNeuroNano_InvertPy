@@ -44,16 +44,16 @@ class MinimalDeviceCX(CentralComplexBase):
         super().__init__(*args, **kwargs)
         if use_nanowires:
             # To be implemented once nanowire response to polarized light is known
-            self["compass"] = MinimalDevicePolarisationSensor(POL_method, nb_lenses=nb_direction, omm_photoreceptor_angle=omm_photoreceptor_angle, field_of_view=field_of_view, degrees=degrees, spiking=spiking,*args, **kwargs)
+            self["compass"] = MinimalDevicePolarisationSensor(POL_method, nb_lenses=nb_direction, omm_photoreceptor_angle=omm_photoreceptor_angle, field_of_view=field_of_view, degrees=degrees,*args, **kwargs)
         else:
-            self["compass"] = MinimalDevicePolarisationSensor(POL_method, nb_lenses=nb_direction, omm_photoreceptor_angle=omm_photoreceptor_angle, field_of_view=field_of_view, degrees=degrees, spiking=spiking,*args, **kwargs)
+            self["compass"] = MinimalDevicePolarisationSensor(POL_method, nb_lenses=nb_direction, omm_photoreceptor_angle=omm_photoreceptor_angle, field_of_view=field_of_view, degrees=degrees, *args, **kwargs)
 
         if use_dye:
             self["memory"] = MinimalDevicePathIntegrationDyeLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool, nanowire_sigmoid=nanowire_sigmoid, nanowire_sigmoid_dev=nanowire_sigmoid_dev, communication_noise_factor=communication_noise_factor, total_downscaling_factor=total_downscaling_factor)
         else:
-            self["memory"] = MinimalDevicePathIntegratorLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool, spiking=spiking, spiking_memory_type=spiking_memory_type)
+            self["memory"] = MinimalDevicePathIntegratorLayer(nb_direction=nb_direction, nb_memory=nb_memory, tau=tau, b_c=b_c, update=update, sigmoid_bool=sigmoid_bool)
 
-        self["steering"] = MinimalDeviceSteering(nb_direction=nb_direction, nb_memory=nb_memory, nb_sigmoid=nb_sigmoid, nb_steer=nb_steer, a=a, b_s=b_s, spiking=spiking, communication_noise_factor=communication_noise_factor, total_downscaling_factor=total_downscaling_factor)
+        self["steering"] = MinimalDeviceSteering(nb_direction=nb_direction, nb_memory=nb_memory, nb_sigmoid=nb_sigmoid, nb_steer=nb_steer, a=a, b_s=b_s, communication_noise_factor=communication_noise_factor, total_downscaling_factor=total_downscaling_factor)
 
         self.nb_direction = nb_direction
         self.nb_memory = nb_memory

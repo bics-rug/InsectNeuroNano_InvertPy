@@ -104,7 +104,7 @@ class PolarisationSensor(CompoundEye):
         return self.nb_ommatidia
 
 
-class MinimalDevicePolarisationSensor(PolarisationSensor):
+class MinimalDeviceSpikingPolarisationSensor(PolarisationSensor):
     def __init__(self, POL_method="single_0", nb_lenses=3, omm_photoreceptor_angle=2, field_of_view=56, degrees=True, spiking=False, *args, **kwargs):
         kwargs.setdefault('name', 'minimal_device_pol_compass')
         super().__init__(nb_lenses, field_of_view, degrees, *args, **kwargs)
@@ -144,6 +144,33 @@ class MinimalDevicePolarisationSensor(PolarisationSensor):
             return spike_trains
         else:
             return self.r_POL
+
+class MinimalDevicePolarisationSensor(PolarisationSensor):
+    def __init__(self, POL_method="single_0", nb_lenses=3, omm_photoreceptor_angle=2, field_of_view=56, degrees=True, *args, **kwargs):
+        kwargs.setdefault('name', 'minimal_device_pol_compass')
+        super().__init__(nb_lenses, field_of_view, degrees, *args, **kwargs)
+        self._phot_angle = self.process_omm_photoreceptor_angle(omm_photoreceptor_angle)
+        self.POL_method = POL_method
+        self.r_POL = np.zeros(nb_lenses)
+
+    def _sense(self, sky=None, scene=None):
+        """
+        Transform the photoreceptor signals to POL-neuron responses.
+        """
+        r = super(PolarisationSensor, self)._sense(sky=sky, scene=scene)
+        POL_responses = np.asarray(minimaldevice_photoreceptor2pol(r, POL_method=self.POL_method, ori=self.omm_ori, nb_receptors=self._phot_angle,
+                                            dtype=self.dtype), dtype=self.dtype)
+        if len(POL_responses) == 6:
+            POL_responses_3 = np.zeros(3)
+            POL_responses_3[0] = POL_responses[1] - POL_responses[4]
+            POL_responses_3[1] = POL_responses[3] - POL_responses[0]
+            POL_responses_3[2] = POL_responses[5] - POL_responses[2]
+            POL_responses_3 = POL_responses_3 + 1 # make all responses positive (from range (-1,1) to (0,2))
+            POL_responses_3 /= 2 # back to (0,1)
+        else:
+            POL_responses_3 = POL_responses
+        self.r_POL = POL_responses_3
+        return self.r_POL
 
 def generate_rings(nb_samples, fov, degrees=True):
     """
